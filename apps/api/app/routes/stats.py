@@ -14,9 +14,13 @@ def stats() -> dict[str, int]:
         interactions = connection.execute(
             text("SELECT COUNT(*) FROM interactions")
         ).scalar_one()
+        embeddings = connection.execute(
+            text("SELECT COUNT(*) FROM item_embeddings")
+        ).scalar_one()
 
     return {
         "users": users,
         "items": items,
         "interactions": interactions,
+        "embeddings": embeddings,
     }

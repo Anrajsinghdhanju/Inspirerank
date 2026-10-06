@@ -1,9 +1,13 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, String, Text, UniqueConstraint
+from pgvector.sqlalchemy import VECTOR
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+
+
+EMBEDDING_DIM = 768
 
 
 class User(Base):
@@ -50,6 +54,24 @@ class Interaction(Base):
     )
     rating: Mapped[float | None] = mapped_column(Float)
     event_timestamp_ms: Mapped[int] = mapped_column(BigInteger, index=True)
-    verified_purchase: Mapped[bool | None]
+    verified_purchase: Mapped[bool | None] = mapped_column(Boolean)
     review_title: Mapped[str | None] = mapped_column(Text)
     review_text: Mapped[str | None] = mapped_column(Text)
+
+
+class ItemEmbedding(Base):
+    __tablename__ = "item_embeddings"
+
+    item_id: Mapped[str] = mapped_column(
+        ForeignKey("items.item_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    image_embedding: Mapped[list[float]] = mapped_column(VECTOR(EMBEDDING_DIM))
+    text_embedding: Mapped[list[float]] = mapped_column(VECTOR(EMBEDDING_DIM))
+    multimodal_embedding: Mapped[list[float]] = mapped_column(VECTOR(EMBEDDING_DIM))
+    model_name: Mapped[str] = mapped_column(String(128))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )

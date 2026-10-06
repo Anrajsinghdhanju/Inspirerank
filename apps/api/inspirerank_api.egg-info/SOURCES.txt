@@ -8,13 +8,17 @@ app/db/base.py
 app/db/init_db.py
 app/db/models.py
 app/db/session.py
+app/ml/__init__.py
+app/ml/encoder.py
 app/routes/__init__.py
 app/routes/health.py
+app/routes/search.py
 app/routes/stats.py
 inspirerank_api.egg-info/PKG-INFO
 inspirerank_api.egg-info/SOURCES.txt
 inspirerank_api.egg-info/dependency_links.txt
 inspirerank_api.egg-info/requires.txt
 inspirerank_api.egg-info/top_level.txt
+scripts/generate_embeddings.py
 scripts/ingest_amazon.py
 tests/test_root.py

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "inspirerank-api"
-version = "0.1.0"
+version = "0.2.0"
 description = "FastAPI backend for InspireRank"
 requires-python = ">=3.12"
 dependencies = [
@@ -21,6 +21,13 @@ dependencies = [
 data = [
   "datasets>=3.0",
   "huggingface-hub>=0.26",
+]
+ml = [
+  "torch>=2.5",
+  "transformers>=4.56",
+  "pillow>=11.0",
+  "httpx>=0.27",
+  "safetensors>=0.4",
 ]
 dev = [
   "pytest>=8.3",
