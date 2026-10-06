@@ -1,0 +1,19 @@
+Metadata-Version: 2.4
+Name: inspirerank-api
+Version: 0.1.0
+Summary: FastAPI backend for InspireRank
+Requires-Python: >=3.12
+Requires-Dist: fastapi>=0.115
+Requires-Dist: uvicorn[standard]>=0.32
+Requires-Dist: sqlalchemy>=2.0
+Requires-Dist: psycopg[binary]>=3.2
+Requires-Dist: pydantic-settings>=2.6
+Requires-Dist: redis>=5.2
+Requires-Dist: pgvector>=0.3
+Provides-Extra: data
+Requires-Dist: datasets>=3.0; extra == "data"
+Requires-Dist: huggingface-hub>=0.26; extra == "data"
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3; extra == "dev"
+Requires-Dist: httpx>=0.27; extra == "dev"
+Requires-Dist: ruff>=0.8; extra == "dev"

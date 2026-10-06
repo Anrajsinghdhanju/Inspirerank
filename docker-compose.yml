@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: inspirerank-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-inspirerank}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inspirerank}
+      POSTGRES_DB: ${POSTGRES_DB:-inspirerank}
+    ports:
+      - "5432:5432"
+    volumes:
+      - inspirerank_postgres:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-inspirerank} -d ${POSTGRES_DB:-inspirerank}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: inspirerank-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - inspirerank_redis:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  inspirerank_postgres:
+  inspirerank_redis:
