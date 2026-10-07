@@ -1,0 +1,11 @@
+{
+  "epochs": 12,
+  "batch_size": 512,
+  "embedding_dim": 128,
+  "learning_rate": 0.001,
+  "temperature": 0.07,
+  "seed": 42,
+  "num_users": 5000,
+  "num_items": 22643,
+  "train_pairs": 34886
+}

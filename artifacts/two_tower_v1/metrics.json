@@ -1,0 +1,46 @@
+{
+  "validation": {
+    "targets": 5000,
+    "warm_targets": 2590,
+    "cold_targets": 2410,
+    "warm_coverage": 0.518,
+    "cold_item_rate": 0.482,
+    "max_possible_overall_recall_for_id_only": 0.518,
+    "overall": {
+      "recall@10": 0.0016,
+      "ndcg@10": 0.0006181929526361112,
+      "recall@20": 0.0028,
+      "ndcg@20": 0.000935798315506667,
+      "mrr": 0.0006823991003446136
+    },
+    "warm_only": {
+      "recall@10": 0.003088803088803089,
+      "ndcg@10": 0.0011934226884867012,
+      "recall@20": 0.005405405405405406,
+      "ndcg@20": 0.0018065604546460752,
+      "mrr": 0.0013173727805880571
+    }
+  },
+  "test": {
+    "targets": 5000,
+    "warm_targets": 2493,
+    "cold_targets": 2507,
+    "warm_coverage": 0.4986,
+    "cold_item_rate": 0.5014,
+    "max_possible_overall_recall_for_id_only": 0.4986,
+    "overall": {
+      "recall@10": 0.002,
+      "ndcg@10": 0.0012306545910855894,
+      "recall@20": 0.0024,
+      "ndcg@20": 0.0013286170843992157,
+      "mrr": 0.0012875986437812048
+    },
+    "warm_only": {
+      "recall@10": 0.004011231448054553,
+      "ndcg@10": 0.002468220198727616,
+      "recall@20": 0.0048134777376654635,
+      "ndcg@20": 0.0026646953156823417,
+      "mrr": 0.00258242808620378
+    }
+  }
+}
