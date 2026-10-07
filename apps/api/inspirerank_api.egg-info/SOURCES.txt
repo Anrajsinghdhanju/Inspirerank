@@ -12,6 +12,7 @@ app/ml/__init__.py
 app/ml/encoder.py
 app/routes/__init__.py
 app/routes/health.py
+app/routes/recommendations.py
 app/routes/search.py
 app/routes/stats.py
 inspirerank_api.egg-info/PKG-INFO
@@ -19,6 +20,7 @@ inspirerank_api.egg-info/SOURCES.txt
 inspirerank_api.egg-info/dependency_links.txt
 inspirerank_api.egg-info/requires.txt
 inspirerank_api.egg-info/top_level.txt
+scripts/analyze_interactions.py
 scripts/generate_embeddings.py
 scripts/ingest_amazon.py
 tests/test_root.py

@@ -21,3 +21,4 @@ transformers>=4.56
 pillow>=11.0
 httpx>=0.27
 safetensors>=0.4
+numpy>=2.0

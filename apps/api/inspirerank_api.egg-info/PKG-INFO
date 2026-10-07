@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: inspirerank-api
-Version: 0.2.0
+Version: 0.3.0
 Summary: FastAPI backend for InspireRank
 Requires-Python: >=3.12
 Requires-Dist: fastapi>=0.115
@@ -19,6 +19,7 @@ Requires-Dist: transformers>=4.56; extra == "ml"
 Requires-Dist: pillow>=11.0; extra == "ml"
 Requires-Dist: httpx>=0.27; extra == "ml"
 Requires-Dist: safetensors>=0.4; extra == "ml"
+Requires-Dist: numpy>=2.0; extra == "ml"
 Provides-Extra: dev
 Requires-Dist: pytest>=8.3; extra == "dev"
 Requires-Dist: httpx>=0.27; extra == "dev"
