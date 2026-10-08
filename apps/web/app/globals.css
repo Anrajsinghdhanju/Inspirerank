@@ -1,0 +1,275 @@
+:root {
+  color-scheme: light;
+  --background: #f7f7f4;
+  --surface: #ffffff;
+  --text: #151515;
+  --muted: #717171;
+  --line: #e5e5df;
+  --accent: #111111;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--text);
+}
+
+button,
+select {
+  font: inherit;
+}
+
+main {
+  width: min(1480px, calc(100% - 48px));
+  margin: 0 auto;
+  padding-bottom: 80px;
+}
+
+.topbar {
+  min-height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar h1 {
+  margin: 2px 0 0;
+  font-size: 28px;
+  letter-spacing: -0.04em;
+}
+
+.eyebrow,
+.heroLabel {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.userPicker {
+  display: grid;
+  gap: 6px;
+  min-width: 300px;
+}
+
+.userPicker label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.userPicker select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px 14px;
+  background: var(--surface);
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 32px;
+  align-items: flex-end;
+  padding: 64px 0 56px;
+}
+
+.hero h2 {
+  max-width: 800px;
+  margin: 10px 0 16px;
+  font-size: clamp(42px, 6vw, 86px);
+  line-height: 0.94;
+  letter-spacing: -0.06em;
+}
+
+.hero p:not(.heroLabel) {
+  max-width: 650px;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.metricCard {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  padding: 24px;
+  display: grid;
+}
+
+.metricCard span,
+.metricCard small {
+  color: var(--muted);
+}
+
+.metricCard strong {
+  margin: 6px 0 2px;
+  font-size: 48px;
+  letter-spacing: -0.06em;
+}
+
+.sectionHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  margin: 36px 0 18px;
+}
+
+.sectionHeading h3 {
+  margin: 5px 0 0;
+  font-size: 28px;
+  letter-spacing: -0.04em;
+}
+
+.strategy {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.historyRow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.historyChip {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 8px;
+}
+
+.historyChip img,
+.historyPlaceholder {
+  width: 54px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #ecece7;
+}
+
+.historyChip span {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.masonry {
+  columns: 5 240px;
+  column-gap: 16px;
+}
+
+.card {
+  break-inside: avoid;
+  margin: 0 0 16px;
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.imageWrap {
+  position: relative;
+  background: #ecece7;
+}
+
+.imageWrap img {
+  width: 100%;
+  display: block;
+  max-height: 420px;
+  object-fit: cover;
+}
+
+.imagePlaceholder {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.strategyBadge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(12px);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.cardBody {
+  padding: 14px;
+}
+
+.cardBody h4 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 650;
+}
+
+.meta {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.loading {
+  padding: 80px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+@media (max-width: 800px) {
+  main {
+    width: min(100% - 24px, 1480px);
+  }
+
+  .topbar,
+  .sectionHeading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .userPicker {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .hero {
+    grid-template-columns: 1fr;
+    padding-top: 42px;
+  }
+
+  .historyRow {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .masonry {
+    columns: 2 150px;
+  }
+}
