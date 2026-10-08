@@ -1,0 +1,6 @@
+{
+  "model_name": "google/siglip-base-patch16-224",
+  "embedding_dim": 768,
+  "n_items": 27206,
+  "fusion": "normalize(text + image); text fallback when image unavailable"
+}
