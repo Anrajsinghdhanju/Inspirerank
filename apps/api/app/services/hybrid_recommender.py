@@ -10,7 +10,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 
-from app.ml_recsys.content_two_tower import LearnedMultimodalTwoTower
+from ml_recsys.content_two_tower import LearnedMultimodalTwoTower
 from app.services.realtime_feedback import (
     EVENT_WEIGHTS,
     get_feedback_store,
