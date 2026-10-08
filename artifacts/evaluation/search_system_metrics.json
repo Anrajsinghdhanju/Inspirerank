@@ -1,0 +1,294 @@
+{
+  "users": 4,
+  "limit": 20,
+  "quality": {
+    "catalog_items": 27206,
+    "allowed_items": 27180,
+    "filtered_items": 26,
+    "allowed_rate": 0.999044328456958,
+    "reason_counts": {
+      "no_alphabetic_words": 1,
+      "low_alpha_ratio": 8,
+      "suspicious_consonant_token": 15,
+      "title_too_short": 2
+    }
+  },
+  "queries": [
+    {
+      "query": "craft supplies",
+      "overlap_at_5": 0.5666666666666667,
+      "overlap_at_10": 0.75,
+      "overlap_at_20": 0.7583333333333333,
+      "rank_displacement_at_10": 0.23357583774250443,
+      "semantic_relevance_mean": 0.7322753965854645,
+      "diversity_mean": 0.28034958243370056,
+      "latency_ms_mean": 87.9175,
+      "per_user": [
+        {
+          "user_id": "AGBG3KK74IKWJNQVMQAGVBWJ7FAQ",
+          "specificity": 0.23,
+          "personalization_strength": 0.432,
+          "semantic_relevance": 0.7344192266464233,
+          "diversity": 0.2795782685279846,
+          "total_latency_ms": 100.95
+        },
+        {
+          "user_id": "AEIQWHAKKCWLXL2JYRRVBHA3C7ZA",
+          "specificity": 0.23,
+          "personalization_strength": 0.432,
+          "semantic_relevance": 0.7327152490615845,
+          "diversity": 0.28163284063339233,
+          "total_latency_ms": 81.05
+        },
+        {
+          "user_id": "AEYOZBFE2OGP2NE2BHTAJEGZD6YQ",
+          "specificity": 0.2307,
+          "personalization_strength": 0.4319,
+          "semantic_relevance": 0.7300053834915161,
+          "diversity": 0.2822795510292053,
+          "total_latency_ms": 86.67
+        },
+        {
+          "user_id": "AGLHUP7HXXRY4F5REK5FBSZFKGGA",
+          "specificity": 0.23,
+          "personalization_strength": 0.432,
+          "semantic_relevance": 0.731961727142334,
+          "diversity": 0.27790766954421997,
+          "total_latency_ms": 83.0
+        }
+      ]
+    },
+    {
+      "query": "creative gift",
+      "overlap_at_5": 0.7999999999999999,
+      "overlap_at_10": 0.7666666666666667,
+      "overlap_at_20": 0.7083333333333331,
+      "rank_displacement_at_10": 0.1349206349206349,
+      "semantic_relevance_mean": 0.6922432780265808,
+      "diversity_mean": 0.2799083888530731,
+      "latency_ms_mean": 83.435,
+      "per_user": [
+        {
+          "user_id": "AGBG3KK74IKWJNQVMQAGVBWJ7FAQ",
+          "specificity": 0.0967,
+          "personalization_strength": 0.4674,
+          "semantic_relevance": 0.6932264566421509,
+          "diversity": 0.2780948281288147,
+          "total_latency_ms": 83.25
+        },
+        {
+          "user_id": "AEIQWHAKKCWLXL2JYRRVBHA3C7ZA",
+          "specificity": 0.0967,
+          "personalization_strength": 0.4674,
+          "semantic_relevance": 0.6919601559638977,
+          "diversity": 0.2648167610168457,
+          "total_latency_ms": 84.18
+        },
+        {
+          "user_id": "AEYOZBFE2OGP2NE2BHTAJEGZD6YQ",
+          "specificity": 0.0994,
+          "personalization_strength": 0.4666,
+          "semantic_relevance": 0.6919807195663452,
+          "diversity": 0.28238701820373535,
+          "total_latency_ms": 80.2
+        },
+        {
+          "user_id": "AGLHUP7HXXRY4F5REK5FBSZFKGGA",
+          "specificity": 0.0967,
+          "personalization_strength": 0.4674,
+          "semantic_relevance": 0.6918057799339294,
+          "diversity": 0.29433494806289673,
+          "total_latency_ms": 86.11
+        }
+      ]
+    },
+    {
+      "query": "DIY project",
+      "overlap_at_5": 0.8333333333333334,
+      "overlap_at_10": 0.65,
+      "overlap_at_20": 0.625,
+      "rank_displacement_at_10": 0.2107583774250441,
+      "semantic_relevance_mean": 0.7106001824140549,
+      "diversity_mean": 0.258994460105896,
+      "latency_ms_mean": 84.2,
+      "per_user": [
+        {
+          "user_id": "AGBG3KK74IKWJNQVMQAGVBWJ7FAQ",
+          "specificity": 0.1948,
+          "personalization_strength": 0.4414,
+          "semantic_relevance": 0.7125190496444702,
+          "diversity": 0.2245233654975891,
+          "total_latency_ms": 90.8
+        },
+        {
+          "user_id": "AEIQWHAKKCWLXL2JYRRVBHA3C7ZA",
+          "specificity": 0.1948,
+          "personalization_strength": 0.4414,
+          "semantic_relevance": 0.7119312286376953,
+          "diversity": 0.23667985200881958,
+          "total_latency_ms": 80.96
+        },
+        {
+          "user_id": "AEYOZBFE2OGP2NE2BHTAJEGZD6YQ",
+          "specificity": 0.1958,
+          "personalization_strength": 0.4411,
+          "semantic_relevance": 0.7087488770484924,
+          "diversity": 0.27510005235671997,
+          "total_latency_ms": 81.73
+        },
+        {
+          "user_id": "AGLHUP7HXXRY4F5REK5FBSZFKGGA",
+          "specificity": 0.1948,
+          "personalization_strength": 0.4414,
+          "semantic_relevance": 0.7092015743255615,
+          "diversity": 0.2996745705604553,
+          "total_latency_ms": 83.31
+        }
+      ]
+    },
+    {
+      "query": "beginner art supplies",
+      "overlap_at_5": 0.7666666666666666,
+      "overlap_at_10": 0.7666666666666667,
+      "overlap_at_20": 0.8333333333333334,
+      "rank_displacement_at_10": 0.11834950029394471,
+      "semantic_relevance_mean": 0.7494623512029648,
+      "diversity_mean": 0.22993245720863342,
+      "latency_ms_mean": 82.4075,
+      "per_user": [
+        {
+          "user_id": "AGBG3KK74IKWJNQVMQAGVBWJ7FAQ",
+          "specificity": 0.3824,
+          "personalization_strength": 0.3917,
+          "semantic_relevance": 0.7502754330635071,
+          "diversity": 0.22003281116485596,
+          "total_latency_ms": 81.47
+        },
+        {
+          "user_id": "AEIQWHAKKCWLXL2JYRRVBHA3C7ZA",
+          "specificity": 0.3946,
+          "personalization_strength": 0.3884,
+          "semantic_relevance": 0.7493208050727844,
+          "diversity": 0.22125238180160522,
+          "total_latency_ms": 85.29
+        },
+        {
+          "user_id": "AEYOZBFE2OGP2NE2BHTAJEGZD6YQ",
+          "specificity": 0.3796,
+          "personalization_strength": 0.3924,
+          "semantic_relevance": 0.750226616859436,
+          "diversity": 0.22821325063705444,
+          "total_latency_ms": 77.54
+        },
+        {
+          "user_id": "AGLHUP7HXXRY4F5REK5FBSZFKGGA",
+          "specificity": 0.3796,
+          "personalization_strength": 0.3924,
+          "semantic_relevance": 0.7480265498161316,
+          "diversity": 0.25023138523101807,
+          "total_latency_ms": 85.33
+        }
+      ]
+    },
+    {
+      "query": "watercolor supplies for beginners",
+      "overlap_at_5": 1.0,
+      "overlap_at_10": 0.8999999999999999,
+      "overlap_at_20": 0.8583333333333334,
+      "rank_displacement_at_10": 0.05555555555555556,
+      "semantic_relevance_mean": 0.7570106536149979,
+      "diversity_mean": 0.167752206325531,
+      "latency_ms_mean": 86.2525,
+      "per_user": [
+        {
+          "user_id": "AGBG3KK74IKWJNQVMQAGVBWJ7FAQ",
+          "specificity": 0.518,
+          "personalization_strength": 0.3557,
+          "semantic_relevance": 0.7550780773162842,
+          "diversity": 0.17433196306228638,
+          "total_latency_ms": 82.66
+        },
+        {
+          "user_id": "AEIQWHAKKCWLXL2JYRRVBHA3C7ZA",
+          "specificity": 0.5088,
+          "personalization_strength": 0.3582,
+          "semantic_relevance": 0.7575756907463074,
+          "diversity": 0.15292584896087646,
+          "total_latency_ms": 84.58
+        },
+        {
+          "user_id": "AEYOZBFE2OGP2NE2BHTAJEGZD6YQ",
+          "specificity": 0.5078,
+          "personalization_strength": 0.3584,
+          "semantic_relevance": 0.7577796578407288,
+          "diversity": 0.1709376573562622,
+          "total_latency_ms": 93.16
+        },
+        {
+          "user_id": "AGLHUP7HXXRY4F5REK5FBSZFKGGA",
+          "specificity": 0.5078,
+          "personalization_strength": 0.3584,
+          "semantic_relevance": 0.7576091885566711,
+          "diversity": 0.17281335592269897,
+          "total_latency_ms": 84.61
+        }
+      ]
+    },
+    {
+      "query": "origami paper with Japanese patterns",
+      "overlap_at_5": 1.0,
+      "overlap_at_10": 1.0,
+      "overlap_at_20": 0.9250000000000002,
+      "rank_displacement_at_10": 0.05185185185185185,
+      "semantic_relevance_mean": 0.7283969074487686,
+      "diversity_mean": 0.22300821542739868,
+      "latency_ms_mean": 83.7525,
+      "per_user": [
+        {
+          "user_id": "AGBG3KK74IKWJNQVMQAGVBWJ7FAQ",
+          "specificity": 0.85,
+          "personalization_strength": 0.2678,
+          "semantic_relevance": 0.7292963862419128,
+          "diversity": 0.21603995561599731,
+          "total_latency_ms": 87.39
+        },
+        {
+          "user_id": "AEIQWHAKKCWLXL2JYRRVBHA3C7ZA",
+          "specificity": 0.85,
+          "personalization_strength": 0.2678,
+          "semantic_relevance": 0.7295214533805847,
+          "diversity": 0.21616435050964355,
+          "total_latency_ms": 81.09
+        },
+        {
+          "user_id": "AEYOZBFE2OGP2NE2BHTAJEGZD6YQ",
+          "specificity": 0.85,
+          "personalization_strength": 0.2678,
+          "semantic_relevance": 0.7278501391410828,
+          "diversity": 0.23074162006378174,
+          "total_latency_ms": 80.59
+        },
+        {
+          "user_id": "AGLHUP7HXXRY4F5REK5FBSZFKGGA",
+          "specificity": 0.85,
+          "personalization_strength": 0.2678,
+          "semantic_relevance": 0.7269196510314941,
+          "diversity": 0.22908693552017212,
+          "total_latency_ms": 85.94
+        }
+      ]
+    }
+  ],
+  "latency": {
+    "total_p50_ms": 83.745,
+    "total_p95_ms": 92.806,
+    "total_mean_ms": 84.66083333333334,
+    "stages_mean_ms": {
+      "query_encode": 73.05958333333334,
+      "user_profiles": 2.9358333333333335,
+      "candidate_retrieval": 3.87625,
+      "personalized_rerank": 0.9370833333333334,
+      "mmr": 2.7408333333333332
+    }
+  }
+}

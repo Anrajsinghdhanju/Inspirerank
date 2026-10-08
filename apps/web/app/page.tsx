@@ -21,6 +21,7 @@ type Item = {
   price: string | null;
   average_rating: number | null;
   score: number;
+  quality_score?: number;
   interaction_support: number;
   strategy: string;
 };
@@ -31,6 +32,15 @@ type HistoryItem = {
   image_url: string | null;
 };
 
+type TimingData = {
+  total: number;
+  query_encode?: number;
+  user_profiles?: number;
+  candidate_retrieval?: number;
+  personalized_rerank?: number;
+  mmr?: number;
+};
+
 type FeedResponse = {
   user_id: string;
   strategy: string;
@@ -38,6 +48,7 @@ type FeedResponse = {
   realtime_event_count: number;
   history_examples: HistoryItem[];
   recommendations: Item[];
+  timings_ms?: TimingData;
 };
 
 type SearchResponse = {
@@ -47,14 +58,10 @@ type SearchResponse = {
   candidate_pool_size: number;
   query_specificity: number;
   personalization_strength: number;
-  weights: {
-    query: number;
-    long_term: number;
-    realtime: number;
-    behavior: number;
-  };
+  quality_filtered_catalog_items: number;
   realtime_event_count: number;
   results: Item[];
+  timings_ms: TimingData;
 };
 
 type FeedbackType =
@@ -273,9 +280,9 @@ export default function Home() {
           </h2>
 
           <p>
-            Search by meaning, retrieve relevant
-            candidates, then personalize and diversify
-            the final ranking.
+            Query-conditioned personalization,
+            quality filtering, and measurable
+            diversity — now with stage-level latency.
           </p>
 
           <form
@@ -313,10 +320,10 @@ export default function Home() {
 
               <div className="searchDiagnostics">
                 <span>
-                  {search.candidate_pool_size} semantic candidates
+                  {search.candidate_pool_size} candidates
                 </span>
                 <span>
-                  Query specificity{" "}
+                  Specificity{" "}
                   {Math.round(
                     search.query_specificity * 100,
                   )}
@@ -329,6 +336,12 @@ export default function Home() {
                       100,
                   )}
                   %
+                </span>
+                <span>
+                  {search.quality_filtered_catalog_items} low-quality filtered
+                </span>
+                <span>
+                  {search.timings_ms.total.toFixed(1)} ms total
                 </span>
               </div>
             </>
@@ -400,7 +413,7 @@ export default function Home() {
           <div>
             <span className="eyebrow">
               {search
-                ? "Two-stage personalized search"
+                ? "Evaluated personalized search"
                 : "For you"}
             </span>
 
@@ -478,6 +491,12 @@ export default function Home() {
                     <span>
                       {item.interaction_support} interactions
                     </span>
+
+                    {item.quality_score !== undefined ? (
+                      <span>
+                        Q {item.quality_score.toFixed(2)}
+                      </span>
+                    ) : null}
                   </div>
 
                   <div className="actions">

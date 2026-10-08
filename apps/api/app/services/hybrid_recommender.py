@@ -5,6 +5,7 @@ import math
 from collections import Counter, defaultdict
 from functools import lru_cache
 from pathlib import Path
+from time import perf_counter
 
 import numpy as np
 import pandas as pd
@@ -12,6 +13,7 @@ import torch
 import torch.nn.functional as F
 
 from ml_recsys.content_two_tower import LearnedMultimodalTwoTower
+from app.services.catalog_quality import assess_item
 from app.services.realtime_feedback import EVENT_WEIGHTS, get_feedback_store
 from app.services.semantic_query_encoder import get_query_encoder
 
@@ -32,10 +34,12 @@ MMR_MIN_POOL = 80
 
 SEARCH_CANDIDATE_POOL = 300
 
-# Query-conditioned history attention.
 QUERY_HISTORY_TOP_K = 24
 QUERY_HISTORY_TEMPERATURE = 0.08
 RECENCY_HALF_LIFE = 35.0
+
+# Quality score is only a mild tie-breaker after relevance/personalization.
+SEARCH_QUALITY_WEIGHT = 0.035
 
 
 def _zscore(scores: torch.Tensor) -> torch.Tensor:
@@ -60,6 +64,10 @@ def _minmax(scores: torch.Tensor) -> torch.Tensor:
     return output
 
 
+def _ms(start: float) -> float:
+    return round((perf_counter() - start) * 1000.0, 2)
+
+
 class HybridRecommender:
     def __init__(self) -> None:
         self.device = torch.device(
@@ -74,9 +82,7 @@ class HybridRecommender:
         self.items["parent_asin"] = self.items["parent_asin"].astype(str)
 
         self.item_ids = json.loads(
-            (EMBED_DIR / "item_ids.json").read_text(
-                encoding="utf-8"
-            )
+            (EMBED_DIR / "item_ids.json").read_text(encoding="utf-8")
         )
         self.item_to_idx = {
             item_id: idx
@@ -98,10 +104,7 @@ class HybridRecommender:
         self.image_features = self._load_float("image_embeddings.npy")
         self.image_mask = torch.from_numpy(
             np.array(
-                np.load(
-                    EMBED_DIR / "image_mask.npy",
-                    mmap_mode="r",
-                ),
+                np.load(EMBED_DIR / "image_mask.npy", mmap_mode="r"),
                 dtype=bool,
                 copy=True,
             )
@@ -119,9 +122,7 @@ class HybridRecommender:
             hidden_dim=checkpoint["hidden_dim"],
         ).to(self.device)
 
-        self.model.load_state_dict(
-            checkpoint["model_state_dict"]
-        )
+        self.model.load_state_dict(checkpoint["model_state_dict"])
         self.model.eval()
 
         self.max_history = checkpoint["max_history"]
@@ -139,11 +140,33 @@ class HybridRecommender:
             device=self.device,
         )
 
+        (
+            self.quality_allowed,
+            self.quality_scores,
+            self.quality_reasons,
+        ) = self._build_quality_index()
+
     def has_user(self, user_id: str) -> bool:
         return user_id in self.histories
 
     def has_item(self, item_id: str) -> bool:
         return item_id in self.item_to_idx
+
+    def quality_summary(self) -> dict:
+        allowed = int(self.quality_allowed.sum().item())
+        total = len(self.item_ids)
+
+        reason_counts = Counter()
+        for reasons in self.quality_reasons.values():
+            reason_counts.update(reasons)
+
+        return {
+            "catalog_items": total,
+            "allowed_items": allowed,
+            "filtered_items": total - allowed,
+            "allowed_rate": allowed / total if total else 0.0,
+            "reason_counts": dict(reason_counts),
+        }
 
     def _load_float(self, name: str) -> torch.Tensor:
         array = np.array(
@@ -157,19 +180,45 @@ class HybridRecommender:
 
         return torch.from_numpy(array).to(self.device)
 
+    def _build_quality_index(self):
+        allowed = []
+        scores = []
+        reasons_by_item: dict[str, tuple[str, ...]] = {}
+
+        for item_id in self.item_ids:
+            assessment = assess_item(
+                self.metadata.get(item_id, {})
+            )
+
+            allowed.append(assessment.allowed)
+            scores.append(assessment.score)
+
+            if assessment.reasons:
+                reasons_by_item[item_id] = assessment.reasons
+
+        return (
+            torch.tensor(
+                allowed,
+                dtype=torch.bool,
+                device=self.device,
+            ),
+            torch.tensor(
+                scores,
+                dtype=torch.float32,
+                device=self.device,
+            ),
+            reasons_by_item,
+        )
+
     def _build_histories(self):
         histories = defaultdict(list)
         seen = defaultdict(set)
 
-        ordered = self.train.sort_values(
-            ["user_id", "timestamp"]
-        )
+        ordered = self.train.sort_values(["user_id", "timestamp"])
 
         for row in ordered.itertuples(index=False):
             user = str(row.user_id)
-            idx = self.item_to_idx.get(
-                str(row.parent_asin)
-            )
+            idx = self.item_to_idx.get(str(row.parent_asin))
 
             if idx is not None:
                 histories[user].append(idx)
@@ -181,15 +230,8 @@ class HybridRecommender:
     def _encode_learned_catalog(self) -> torch.Tensor:
         chunks = []
 
-        for start in range(
-            0,
-            len(self.text_features),
-            512,
-        ):
-            end = min(
-                start + 512,
-                len(self.text_features),
-            )
+        for start in range(0, len(self.text_features), 512):
+            end = min(start + 512, len(self.text_features))
 
             chunks.append(
                 self.model.encode_items(
@@ -253,24 +295,14 @@ class HybridRecommender:
             return None
 
         vector = (
-            torch.stack(
-                weighted_vectors,
-                dim=0,
-            ).sum(dim=0)
+            torch.stack(weighted_vectors, dim=0).sum(dim=0)
             / max(sum(weights), 1e-6)
         )
 
-        if (
-            torch.linalg.vector_norm(vector)
-            < 1e-8
-        ):
+        if torch.linalg.vector_norm(vector) < 1e-8:
             return None
 
-        return F.normalize(
-            vector,
-            p=2,
-            dim=0,
-        )
+        return F.normalize(vector, p=2, dim=0)
 
     def _augmented_history(
         self,
@@ -280,10 +312,7 @@ class HybridRecommender:
         positive_items = []
 
         for event in reversed(events):
-            if event.get("event_type") not in {
-                "like",
-                "save",
-            }:
+            if event.get("event_type") not in {"like", "save"}:
                 continue
 
             idx = self.item_to_idx.get(
@@ -303,9 +332,7 @@ class HybridRecommender:
         user_id: str,
     ):
         offline_history = self.histories[user_id]
-        recent_events = self._latest_feedback_per_item(
-            user_id
-        )
+        recent_events = self._latest_feedback_per_item(user_id)
 
         offline_ids = torch.tensor(
             offline_history,
@@ -314,16 +341,12 @@ class HybridRecommender:
         )
 
         global_profile = F.normalize(
-            self.text_matrix[
-                offline_ids
-            ].mean(dim=0),
+            self.text_matrix[offline_ids].mean(dim=0),
             p=2,
             dim=0,
         )
 
-        realtime_profile = self._realtime_profile(
-            recent_events
-        )
+        realtime_profile = self._realtime_profile(recent_events)
 
         learned_history = self._augmented_history(
             offline_history,
@@ -337,15 +360,9 @@ class HybridRecommender:
         )
 
         history_vectors = self.model.encode_items(
-            self.text_features[
-                learned_ids
-            ],
-            self.image_features[
-                learned_ids
-            ],
-            self.image_mask[
-                learned_ids
-            ],
+            self.text_features[learned_ids],
+            self.image_features[learned_ids],
+            self.image_mask[learned_ids],
         ).unsqueeze(0)
 
         history_mask = torch.ones(
@@ -372,12 +389,6 @@ class HybridRecommender:
         user_id: str,
         query_vector: torch.Tensor,
     ) -> tuple[torch.Tensor, list[dict]]:
-        """
-        Build a user representation conditioned on the current query.
-
-        Instead of averaging a user's entire history, attend to the historical
-        items that are most relevant to this search, with a mild recency bias.
-        """
         history = self.histories[user_id]
 
         history_ids = torch.tensor(
@@ -385,13 +396,9 @@ class HybridRecommender:
             dtype=torch.long,
             device=self.device,
         )
-        history_vectors = self.text_matrix[
-            history_ids
-        ]
+        history_vectors = self.text_matrix[history_ids]
 
-        query_similarity = (
-            history_vectors @ query_vector
-        )
+        query_similarity = history_vectors @ query_vector
 
         top_k = min(
             QUERY_HISTORY_TOP_K,
@@ -403,20 +410,11 @@ class HybridRecommender:
             k=top_k,
         )
 
-        selected_ids = history_ids[
-            top_positions
-        ]
-        selected_vectors = history_vectors[
-            top_positions
-        ]
+        selected_ids = history_ids[top_positions]
+        selected_vectors = history_vectors[top_positions]
 
-        # Original history is chronological.
-        # More recent items get a mild boost.
         positions_float = top_positions.float()
-        age = (
-            float(len(history) - 1)
-            - positions_float
-        )
+        age = float(len(history) - 1) - positions_float
 
         recency = torch.exp(
             -math.log(2.0)
@@ -425,11 +423,8 @@ class HybridRecommender:
         )
 
         attention_logits = (
-            top_values
-            / QUERY_HISTORY_TEMPERATURE
-            + torch.log(
-                recency.clamp_min(1e-6)
-            )
+            top_values / QUERY_HISTORY_TEMPERATURE
+            + torch.log(recency.clamp_min(1e-6))
         )
 
         attention = torch.softmax(
@@ -448,11 +443,7 @@ class HybridRecommender:
 
         explanations = []
 
-        top_explain = min(
-            5,
-            len(selected_ids),
-        )
-
+        top_explain = min(5, len(selected_ids))
         explain_order = torch.topk(
             attention,
             k=top_explain,
@@ -460,37 +451,20 @@ class HybridRecommender:
 
         for position in explain_order:
             local = int(position.item())
-            item_idx = int(
-                selected_ids[
-                    local
-                ].item()
-            )
+            item_idx = int(selected_ids[local].item())
             item_id = self.item_ids[item_idx]
-            meta = self.metadata.get(
-                item_id,
-                {},
-            )
+            meta = self.metadata.get(item_id, {})
 
             explanations.append(
                 {
                     "item_id": item_id,
-                    "title": meta.get(
-                        "title"
-                    ),
+                    "title": meta.get("title"),
                     "attention": round(
-                        float(
-                            attention[
-                                local
-                            ].item()
-                        ),
+                        float(attention[local].item()),
                         4,
                     ),
                     "query_similarity": round(
-                        float(
-                            top_values[
-                                local
-                            ].item()
-                        ),
+                        float(top_values[local].item()),
                         4,
                     ),
                 }
@@ -516,9 +490,7 @@ class HybridRecommender:
         semantic_spread = float(
             (
                 sorted_scores[0]
-                - sorted_scores[
-                    probe_index
-                ]
+                - sorted_scores[probe_index]
             ).item()
         )
 
@@ -526,19 +498,14 @@ class HybridRecommender:
             0.0,
             min(
                 1.0,
-                (
-                    semantic_spread
-                    - 0.03
-                )
-                / 0.12,
+                (semantic_spread - 0.03) / 0.12,
             ),
         )
 
         token_count = len(
             [
                 token
-                for token
-                in query.strip().split()
+                for token in query.strip().split()
                 if token
             ]
         )
@@ -552,10 +519,8 @@ class HybridRecommender:
         )
 
         return (
-            0.70
-            * semantic_specificity
-            + 0.30
-            * lexical_specificity
+            0.70 * semantic_specificity
+            + 0.30 * lexical_specificity
         )
 
     def _adaptive_search_weights(
@@ -563,23 +528,6 @@ class HybridRecommender:
         specificity: float,
         has_realtime: bool,
     ) -> dict[str, float]:
-        """
-        Query-conditioned history becomes the primary personalization signal.
-
-        Broad:
-          query 0.48
-          query-history 0.30
-          global taste 0.08
-          realtime 0.09
-          behavior 0.05
-
-        Specific:
-          query 0.76
-          query-history 0.13
-          global taste 0.04
-          realtime 0.04
-          behavior 0.03
-        """
         broad = {
             "query": 0.48,
             "query_history": 0.30,
@@ -609,26 +557,17 @@ class HybridRecommender:
         }
 
         if not has_realtime:
-            missing = weights[
-                "realtime"
-            ]
+            missing = weights["realtime"]
             weights["realtime"] = 0.0
 
-            weights[
-                "query_history"
-            ] += missing * 0.70
-            weights["query"] += (
-                missing * 0.30
-            )
+            weights["query_history"] += missing * 0.70
+            weights["query"] += missing * 0.30
 
-        total = sum(
-            weights.values()
-        )
+        total = sum(weights.values())
 
         return {
             key: value / total
-            for key, value
-            in weights.items()
+            for key, value in weights.items()
         }
 
     def _mmr_from_candidates(
@@ -645,8 +584,7 @@ class HybridRecommender:
             len(candidate_indices),
             max(
                 MMR_MIN_POOL,
-                limit
-                * MMR_POOL_MULTIPLIER,
+                limit * MMR_POOL_MULTIPLIER,
             ),
         )
 
@@ -655,17 +593,10 @@ class HybridRecommender:
             k=pool_size,
         )
 
-        pool_indices = candidate_indices[
-            order
-        ]
+        pool_indices = candidate_indices[order]
 
-        relevance = _minmax(
-            pool_scores
-        )
-
-        vectors = self.text_matrix[
-            pool_indices
-        ]
+        relevance = _minmax(pool_scores)
+        vectors = self.text_matrix[pool_indices]
 
         selected_local = []
         remaining = torch.ones(
@@ -676,16 +607,11 @@ class HybridRecommender:
 
         while (
             len(selected_local)
-            < min(
-                limit,
-                len(pool_indices),
-            )
+            < min(limit, len(pool_indices))
         ):
             if not selected_local:
                 best_local = int(
-                    torch.argmax(
-                        relevance
-                    ).item()
+                    torch.argmax(relevance).item()
                 )
             else:
                 selected_vectors = vectors[
@@ -699,46 +625,27 @@ class HybridRecommender:
                 similarity = (
                     vectors
                     @ selected_vectors.T
-                ).max(
-                    dim=1
-                ).values.clamp(
+                ).max(dim=1).values.clamp(
                     0.0,
                     1.0,
                 )
 
                 mmr_score = (
-                    lambda_value
-                    * relevance
-                    - (
-                        1.0
-                        - lambda_value
-                    )
-                    * similarity
+                    lambda_value * relevance
+                    - (1.0 - lambda_value) * similarity
                 )
 
-                mmr_score[
-                    ~remaining
-                ] = -torch.inf
+                mmr_score[~remaining] = -torch.inf
 
                 best_local = int(
-                    torch.argmax(
-                        mmr_score
-                    ).item()
+                    torch.argmax(mmr_score).item()
                 )
 
-            selected_local.append(
-                best_local
-            )
-            remaining[
-                best_local
-            ] = False
+            selected_local.append(best_local)
+            remaining[best_local] = False
 
         return [
-            int(
-                pool_indices[
-                    idx
-                ].item()
-            )
+            int(pool_indices[idx].item())
             for idx in selected_local
         ]
 
@@ -749,51 +656,33 @@ class HybridRecommender:
         score_breakdown: dict | None = None,
     ) -> dict:
         item_id = self.item_ids[idx]
-        meta = self.metadata.get(
-            item_id,
-            {},
-        )
+        meta = self.metadata.get(item_id, {})
 
         payload = {
             "item_id": item_id,
-            "title": meta.get(
-                "title"
-            ),
-            "image_url": meta.get(
-                "image_url"
-            ),
-            "main_category": meta.get(
-                "main_category"
-            ),
-            "price": meta.get(
-                "price"
-            ),
-            "average_rating": meta.get(
-                "average_rating"
-            ),
-            "score": round(
-                float(score),
-                4,
+            "title": meta.get("title"),
+            "image_url": meta.get("image_url"),
+            "main_category": meta.get("main_category"),
+            "price": meta.get("price"),
+            "average_rating": meta.get("average_rating"),
+            "score": round(float(score), 4),
+            "quality_score": round(
+                float(self.quality_scores[idx].item()),
+                3,
             ),
             "interaction_support": int(
-                self.train_counts[
-                    idx
-                ].item()
+                self.train_counts[idx].item()
             ),
             "strategy": (
                 "semantic+behavioral"
-                if self.train_counts[
-                    idx
-                ].item()
+                if self.train_counts[idx].item()
                 >= MIN_INTERACTIONS
                 else "semantic"
             ),
         }
 
         if score_breakdown is not None:
-            payload[
-                "score_breakdown"
-            ] = score_breakdown
+            payload["score_breakdown"] = score_breakdown
 
         return payload
 
@@ -803,17 +692,19 @@ class HybridRecommender:
         user_id: str,
         limit: int = 20,
     ) -> dict:
+        total_start = perf_counter()
+
         if user_id not in self.histories:
             raise KeyError(user_id)
+
+        profile_start = perf_counter()
 
         (
             global_profile,
             realtime_profile,
             learned_profile,
             recent_events,
-        ) = self._base_user_profiles(
-            user_id
-        )
+        ) = self._base_user_profiles(user_id)
 
         semantic_profile = (
             F.normalize(
@@ -823,124 +714,95 @@ class HybridRecommender:
                 p=2,
                 dim=0,
             )
-            if realtime_profile
-            is not None
+            if realtime_profile is not None
             else global_profile
         )
 
+        profile_ms = _ms(profile_start)
+
+        score_start = perf_counter()
+
         semantic_scores = _zscore(
-            self.text_matrix
-            @ semantic_profile
+            self.text_matrix @ semantic_profile
         )
 
         learned_scores = _zscore(
-            self.learned_catalog
-            @ learned_profile
+            self.learned_catalog @ learned_profile
         )
 
         trust_mask = (
-            self.train_counts
-            >= MIN_INTERACTIONS
-        ).to(
-            semantic_scores.dtype
-        )
+            self.train_counts >= MIN_INTERACTIONS
+        ).to(semantic_scores.dtype)
 
         final_scores = (
             semantic_scores
-            + ALPHA
-            * learned_scores
-            * trust_mask
+            + ALPHA * learned_scores * trust_mask
+            + SEARCH_QUALITY_WEIGHT * self.quality_scores
         )
 
-        for seen_idx in self.seen[
-            user_id
-        ]:
-            final_scores[
-                seen_idx
-            ] = -torch.inf
+        final_scores[~self.quality_allowed] = -torch.inf
+
+        for seen_idx in self.seen[user_id]:
+            final_scores[seen_idx] = -torch.inf
 
         for event in recent_events:
             idx = self.item_to_idx.get(
-                str(
-                    event.get(
-                        "item_id",
-                        "",
-                    )
-                )
+                str(event.get("item_id", ""))
             )
-
             if idx is not None:
-                final_scores[
-                    idx
-                ] = -torch.inf
+                final_scores[idx] = -torch.inf
+
+        score_ms = _ms(score_start)
+
+        mmr_start = perf_counter()
 
         finite_indices = torch.where(
-            torch.isfinite(
-                final_scores
-            )
+            torch.isfinite(final_scores)
         )[0]
 
-        selected_indices = (
-            self._mmr_from_candidates(
-                finite_indices,
-                final_scores[
-                    finite_indices
-                ],
-                limit=limit,
-            )
+        selected_indices = self._mmr_from_candidates(
+            finite_indices,
+            final_scores[finite_indices],
+            limit=limit,
         )
+
+        mmr_ms = _ms(mmr_start)
 
         recommendations = [
             self._item_payload(
                 idx,
-                float(
-                    final_scores[
-                        idx
-                    ].item()
-                ),
+                float(final_scores[idx].item()),
             )
-            for idx
-            in selected_indices
+            for idx in selected_indices
         ]
 
         history_examples = []
 
-        for idx in self.histories[
-            user_id
-        ][-5:]:
-            item_id = self.item_ids[
-                idx
-            ]
-            meta = self.metadata.get(
-                item_id,
-                {},
-            )
+        for idx in self.histories[user_id][-5:]:
+            item_id = self.item_ids[idx]
+            meta = self.metadata.get(item_id, {})
 
             history_examples.append(
                 {
                     "item_id": item_id,
-                    "title": meta.get(
-                        "title"
-                    ),
-                    "image_url": meta.get(
-                        "image_url"
-                    ),
+                    "title": meta.get("title"),
+                    "image_url": meta.get("image_url"),
                 }
             )
 
         return {
             "user_id": user_id,
-            "strategy": "hybrid_realtime_mmr_v1",
-            "history_count": len(
-                self.histories[
-                    user_id
-                ]
-            ),
-            "realtime_event_count": len(
-                recent_events
-            ),
+            "strategy": "hybrid_realtime_mmr_quality_v2",
+            "history_count": len(self.histories[user_id]),
+            "realtime_event_count": len(recent_events),
             "history_examples": history_examples,
             "recommendations": recommendations,
+            "timings_ms": {
+                "user_profile": profile_ms,
+                "scoring": score_ms,
+                "mmr": mmr_ms,
+                "total": _ms(total_start),
+            },
         }
 
     @torch.inference_mode()
@@ -950,8 +812,12 @@ class HybridRecommender:
         query: str,
         limit: int = 24,
     ) -> dict:
+        total_start = perf_counter()
+
         if user_id not in self.histories:
             raise KeyError(user_id)
+
+        encode_start = perf_counter()
 
         query_vector = (
             get_query_encoder()
@@ -959,14 +825,16 @@ class HybridRecommender:
             .to(self.device)
         )
 
+        query_encode_ms = _ms(encode_start)
+
+        profile_start = perf_counter()
+
         (
             global_profile,
             realtime_profile,
             learned_profile,
             recent_events,
-        ) = self._base_user_profiles(
-            user_id
-        )
+        ) = self._base_user_profiles(user_id)
 
         (
             query_history_profile,
@@ -976,37 +844,29 @@ class HybridRecommender:
             query_vector,
         )
 
-        # STAGE 1: pure semantic retrieval.
+        user_profile_ms = _ms(profile_start)
+
+        retrieval_start = perf_counter()
+
         raw_query_scores = (
-            self.text_matrix
-            @ query_vector
+            self.text_matrix @ query_vector
         )
 
-        excluded = set(
-            self.seen[
-                user_id
-            ]
-        )
+        # Quality filtering happens before candidate retrieval.
+        raw_query_scores[~self.quality_allowed] = -torch.inf
+
+        excluded = set(self.seen[user_id])
 
         for event in recent_events:
             idx = self.item_to_idx.get(
-                str(
-                    event.get(
-                        "item_id",
-                        "",
-                    )
-                )
+                str(event.get("item_id", ""))
             )
 
             if idx is not None:
-                excluded.add(
-                    idx
-                )
+                excluded.add(idx)
 
         for idx in excluded:
-            raw_query_scores[
-                idx
-            ] = -torch.inf
+            raw_query_scores[idx] = -torch.inf
 
         available = int(
             torch.isfinite(
@@ -1027,112 +887,89 @@ class HybridRecommender:
             k=candidate_count,
         )
 
-        # STAGE 2: query-conditioned personalization.
+        candidate_retrieval_ms = _ms(retrieval_start)
+
+        rerank_start = perf_counter()
+
         query_component = _minmax(
             candidate_query_scores
         )
 
         query_history_component = _minmax(
-            self.text_matrix[
-                candidate_indices
-            ]
+            self.text_matrix[candidate_indices]
             @ query_history_profile
         )
 
         global_component = _minmax(
-            self.text_matrix[
-                candidate_indices
-            ]
+            self.text_matrix[candidate_indices]
             @ global_profile
         )
 
         if realtime_profile is not None:
             realtime_component = _minmax(
-                self.text_matrix[
-                    candidate_indices
-                ]
+                self.text_matrix[candidate_indices]
                 @ realtime_profile
             )
         else:
-            realtime_component = (
-                torch.zeros_like(
-                    query_component
-                )
+            realtime_component = torch.zeros_like(
+                query_component
             )
 
         behavior_component = _minmax(
-            self.learned_catalog[
-                candidate_indices
-            ]
+            self.learned_catalog[candidate_indices]
             @ learned_profile
         )
 
         trusted = (
-            self.train_counts[
-                candidate_indices
-            ]
+            self.train_counts[candidate_indices]
             >= MIN_INTERACTIONS
-        ).to(
-            behavior_component.dtype
-        )
+        ).to(behavior_component.dtype)
 
         behavior_component = (
-            behavior_component
-            * trusted
+            behavior_component * trusted
         )
 
-        specificity = (
-            self._query_specificity(
-                query,
-                candidate_query_scores,
-            )
+        specificity = self._query_specificity(
+            query,
+            candidate_query_scores,
         )
 
-        weights = (
-            self._adaptive_search_weights(
-                specificity,
-                has_realtime=(
-                    realtime_profile
-                    is not None
-                ),
-            )
+        weights = self._adaptive_search_weights(
+            specificity,
+            has_realtime=(
+                realtime_profile is not None
+            ),
         )
+
+        candidate_quality = self.quality_scores[
+            candidate_indices
+        ]
 
         rerank_scores = (
-            weights["query"]
-            * query_component
-            + weights[
-                "query_history"
-            ]
+            weights["query"] * query_component
+            + weights["query_history"]
             * query_history_component
-            + weights["global"]
-            * global_component
-            + weights[
-                "realtime"
-            ]
-            * realtime_component
-            + weights[
-                "behavior"
-            ]
-            * behavior_component
+            + weights["global"] * global_component
+            + weights["realtime"] * realtime_component
+            + weights["behavior"] * behavior_component
+            + SEARCH_QUALITY_WEIGHT * candidate_quality
         )
 
-        selected_indices = (
-            self._mmr_from_candidates(
-                candidate_indices,
-                rerank_scores,
-                limit=limit,
-            )
+        rerank_ms = _ms(rerank_start)
+
+        mmr_start = perf_counter()
+
+        selected_indices = self._mmr_from_candidates(
+            candidate_indices,
+            rerank_scores,
+            limit=limit,
         )
+
+        mmr_ms = _ms(mmr_start)
 
         local_position = {
-            int(
-                global_idx.item()
-            ): position
-            for (
-                position,
-                global_idx,
-            ) in enumerate(
+            int(global_idx.item()): position
+            for position, global_idx in enumerate(
                 candidate_indices
             )
         }
@@ -1140,50 +977,42 @@ class HybridRecommender:
         results = []
 
         for idx in selected_indices:
-            local = (
-                local_position[
-                    idx
-                ]
-            )
+            local = local_position[idx]
 
             breakdown = {
                 "query": round(
                     float(
-                        query_component[
-                            local
-                        ].item()
+                        query_component[local].item()
                     ),
                     4,
                 ),
                 "query_history": round(
                     float(
-                        query_history_component[
-                            local
-                        ].item()
+                        query_history_component[local].item()
                     ),
                     4,
                 ),
                 "global": round(
                     float(
-                        global_component[
-                            local
-                        ].item()
+                        global_component[local].item()
                     ),
                     4,
                 ),
                 "realtime": round(
                     float(
-                        realtime_component[
-                            local
-                        ].item()
+                        realtime_component[local].item()
                     ),
                     4,
                 ),
                 "behavior": round(
                     float(
-                        behavior_component[
-                            local
-                        ].item()
+                        behavior_component[local].item()
+                    ),
+                    4,
+                ),
+                "quality": round(
+                    float(
+                        candidate_quality[local].item()
                     ),
                     4,
                 ),
@@ -1193,9 +1022,7 @@ class HybridRecommender:
                 self._item_payload(
                     idx,
                     float(
-                        rerank_scores[
-                            local
-                        ].item()
+                        rerank_scores[local].item()
                     ),
                     score_breakdown=breakdown,
                 )
@@ -1205,7 +1032,7 @@ class HybridRecommender:
             "user_id": user_id,
             "query": query,
             "strategy": (
-                "query_conditioned_personalized_search_v3"
+                "query_conditioned_quality_search_v4"
             ),
             "candidate_pool_size": candidate_count,
             "query_specificity": round(
@@ -1213,21 +1040,12 @@ class HybridRecommender:
                 4,
             ),
             "personalization_strength": round(
-                1.0
-                - weights[
-                    "query"
-                ],
+                1.0 - weights["query"],
                 4,
             ),
             "weights": {
-                key: round(
-                    value,
-                    4,
-                )
-                for (
-                    key,
-                    value,
-                ) in weights.items()
+                key: round(value, 4)
+                for key, value in weights.items()
             },
             "query_conditioned_history": (
                 query_history_examples
@@ -1237,7 +1055,20 @@ class HybridRecommender:
             "realtime_event_count": len(
                 recent_events
             ),
+            "quality_filtered_catalog_items": int(
+                (
+                    ~self.quality_allowed
+                ).sum().item()
+            ),
             "results": results,
+            "timings_ms": {
+                "query_encode": query_encode_ms,
+                "user_profiles": user_profile_ms,
+                "candidate_retrieval": candidate_retrieval_ms,
+                "personalized_rerank": rerank_ms,
+                "mmr": mmr_ms,
+                "total": _ms(total_start),
+            },
         }
 
     def demo_users(
