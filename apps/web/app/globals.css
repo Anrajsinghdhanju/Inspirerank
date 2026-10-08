@@ -10,9 +10,7 @@
     "Segoe UI", sans-serif;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
@@ -20,20 +18,9 @@ body {
   color: var(--text);
 }
 
-button,
-select,
-input {
-  font: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: wait;
-  opacity: 0.5;
-}
+button, select, input { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: wait; opacity: 0.5; }
 
 main {
   width: min(1480px, calc(100% - 48px));
@@ -56,8 +43,7 @@ main {
   letter-spacing: -0.04em;
 }
 
-.eyebrow,
-.heroLabel {
+.eyebrow, .heroLabel {
   margin: 0;
   color: var(--muted);
   font-size: 11px;
@@ -77,8 +63,7 @@ main {
   font-size: 12px;
 }
 
-.userPicker select,
-.searchBar input {
+.userPicker select, .searchBar input {
   border: 1px solid var(--line);
   background: var(--surface);
 }
@@ -127,29 +112,38 @@ main {
   outline: none;
 }
 
-.searchBar input:focus {
-  border-color: #a8a8a0;
-}
-
-.searchBar button,
-.backButton,
-.resetButton {
-  border: 1px solid var(--line);
-  background: var(--surface);
-  border-radius: 999px;
-}
-
 .searchBar button {
+  border: 1px solid #151515;
+  border-radius: 999px;
   padding: 14px 22px;
   background: #151515;
   color: #fff;
-  border-color: #151515;
 }
 
-.backButton {
-  margin-top: 12px;
+.backButton, .resetButton {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 999px;
   padding: 9px 13px;
   font-size: 12px;
+}
+
+.backButton { margin-top: 12px; }
+
+.searchDiagnostics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.searchDiagnostics span {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 6px 9px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .metricGrid {
@@ -166,10 +160,7 @@ main {
   display: grid;
 }
 
-.metricCard span,
-.metricCard small {
-  color: var(--muted);
-}
+.metricCard span, .metricCard small { color: var(--muted); }
 
 .metricCard strong {
   margin: 6px 0 2px;
@@ -197,20 +188,12 @@ main {
   gap: 12px;
 }
 
-.strategy,
-.notice {
+.strategy, .notice {
   color: var(--muted);
   font-size: 12px;
 }
 
-.notice {
-  color: var(--text);
-}
-
-.resetButton {
-  padding: 8px 12px;
-  font-size: 12px;
-}
+.notice { color: var(--text); }
 
 .historyRow {
   display: grid;
@@ -230,8 +213,7 @@ main {
   padding: 8px;
 }
 
-.historyChip img,
-.historyPlaceholder {
+.historyChip img, .historyPlaceholder {
   width: 54px;
   height: 54px;
   object-fit: cover;
@@ -295,9 +277,7 @@ main {
   letter-spacing: 0.08em;
 }
 
-.cardBody {
-  padding: 14px;
-}
+.cardBody { padding: 14px; }
 
 .cardBody h4 {
   margin: 0;
@@ -327,19 +307,13 @@ main {
   border-radius: 999px;
   padding: 8px 9px;
   font-size: 11px;
-  transition:
-    transform 120ms ease,
-    background 120ms ease;
 }
 
 .actions button:hover:not(:disabled) {
-  transform: translateY(-1px);
   background: #f2f2ed;
 }
 
-.actions .hideAction {
-  color: var(--muted);
-}
+.actions .hideAction { color: var(--muted); }
 
 .loading {
   padding: 80px 0;
@@ -348,26 +322,15 @@ main {
 }
 
 @media (max-width: 900px) {
-  .hero {
-    grid-template-columns: 1fr;
-  }
-
-  .metricGrid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .historyRow {
-    grid-template-columns: 1fr 1fr;
-  }
+  .hero { grid-template-columns: 1fr; }
+  .metricGrid { grid-template-columns: 1fr 1fr; }
+  .historyRow { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 800px) {
-  main {
-    width: min(100% - 24px, 1480px);
-  }
+  main { width: min(100% - 24px, 1480px); }
 
-  .topbar,
-  .sectionHeading {
+  .topbar, .sectionHeading {
     align-items: stretch;
     flex-direction: column;
   }
@@ -377,30 +340,13 @@ main {
     width: 100%;
   }
 
-  .hero {
-    padding-top: 42px;
-  }
-
-  .masonry {
-    columns: 2 150px;
-  }
+  .hero { padding-top: 42px; }
+  .masonry { columns: 2 150px; }
 }
 
 @media (max-width: 520px) {
-  .metricGrid,
-  .historyRow {
-    grid-template-columns: 1fr;
-  }
-
-  .searchBar {
-    flex-direction: column;
-  }
-
-  .actions {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .actions .hideAction {
-    grid-column: 1 / -1;
-  }
+  .metricGrid, .historyRow { grid-template-columns: 1fr; }
+  .searchBar { flex-direction: column; }
+  .actions { grid-template-columns: 1fr 1fr; }
+  .actions .hideAction { grid-column: 1 / -1; }
 }

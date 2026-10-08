@@ -44,6 +44,15 @@ type SearchResponse = {
   user_id: string;
   query: string;
   strategy: string;
+  candidate_pool_size: number;
+  query_specificity: number;
+  personalization_strength: number;
+  weights: {
+    query: number;
+    long_term: number;
+    realtime: number;
+    behavior: number;
+  };
   realtime_event_count: number;
   results: Item[];
 };
@@ -77,9 +86,7 @@ export default function Home() {
         setUsers(data.users ?? []);
 
         if (data.users?.length) {
-          setSelectedUser(
-            data.users[0].user_id,
-          );
+          setSelectedUser(data.users[0].user_id);
         }
       });
   }, []);
@@ -94,8 +101,8 @@ export default function Home() {
         `${API}/api/v1/feed/${selectedUser}?limit=24`,
         { cache: "no-store" },
       );
-
       const data = await response.json();
+
       setFeed(data);
       setSearch(null);
     } finally {
@@ -110,15 +117,12 @@ export default function Home() {
   const selected = useMemo(
     () =>
       users.find(
-        (user) =>
-          user.user_id === selectedUser,
+        (user) => user.user_id === selectedUser,
       ),
     [users, selectedUser],
   );
 
-  async function runSearch(
-    searchQuery: string,
-  ) {
+  async function runSearch(searchQuery: string) {
     if (!selectedUser || !searchQuery.trim()) {
       return;
     }
@@ -142,8 +146,7 @@ export default function Home() {
         throw new Error("Search failed");
       }
 
-      const data = await response.json();
-      setSearch(data);
+      setSearch(await response.json());
     } catch {
       setNotice(
         "Search failed. Check the API terminal.",
@@ -183,8 +186,7 @@ export default function Home() {
         {
           method: "POST",
           headers: {
-            "Content-Type":
-              "application/json",
+            "Content-Type": "application/json",
           },
           body: JSON.stringify({
             user_id: selectedUser,
@@ -195,9 +197,7 @@ export default function Home() {
       );
 
       if (!response.ok) {
-        throw new Error(
-          "Could not save feedback.",
-        );
+        throw new Error("Could not save feedback");
       }
 
       const label = {
@@ -206,10 +206,7 @@ export default function Home() {
         not_interested: "Hidden",
       }[eventType];
 
-      setNotice(
-        `${label}. Updating results…`,
-      );
-
+      setNotice(`${label}. Updating results…`);
       await reloadCurrentView();
     } catch {
       setNotice(
@@ -217,22 +214,6 @@ export default function Home() {
       );
     } finally {
       setPendingItem(null);
-    }
-  }
-
-  async function resetRealtime() {
-    if (!selectedUser) return;
-
-    const response = await fetch(
-      `${API}/api/v1/interactions/${selectedUser}/recent`,
-      { method: "DELETE" },
-    );
-
-    if (response.ok) {
-      setNotice(
-        "Recent preference signals cleared.",
-      );
-      await reloadCurrentView();
     }
   }
 
@@ -292,9 +273,9 @@ export default function Home() {
           </h2>
 
           <p>
-            Search by meaning, then rank by
-            long-term interests, live feedback,
-            and diversity.
+            Search by meaning, retrieve relevant
+            candidates, then personalize and diversify
+            the final ranking.
           </p>
 
           <form
@@ -306,7 +287,7 @@ export default function Home() {
               onChange={(event) =>
                 setQuery(event.target.value)
               }
-              placeholder="Try: watercolor supplies for beginners"
+              placeholder="Try: craft supplies"
               aria-label="Semantic search"
             />
 
@@ -319,15 +300,38 @@ export default function Home() {
           </form>
 
           {search ? (
-            <button
-              className="backButton"
-              onClick={() => {
-                setQuery("");
-                loadFeed();
-              }}
-            >
-              ← Back to personalized feed
-            </button>
+            <>
+              <button
+                className="backButton"
+                onClick={() => {
+                  setQuery("");
+                  loadFeed();
+                }}
+              >
+                ← Back to personalized feed
+              </button>
+
+              <div className="searchDiagnostics">
+                <span>
+                  {search.candidate_pool_size} semantic candidates
+                </span>
+                <span>
+                  Query specificity{" "}
+                  {Math.round(
+                    search.query_specificity * 100,
+                  )}
+                  %
+                </span>
+                <span>
+                  Personalization{" "}
+                  {Math.round(
+                    search.personalization_strength *
+                      100,
+                  )}
+                  %
+                </span>
+              </div>
+            </>
           ) : null}
         </div>
 
@@ -337,9 +341,7 @@ export default function Home() {
             <strong>
               {selected?.history_count ?? "—"}
             </strong>
-            <small>
-              training interactions
-            </small>
+            <small>training interactions</small>
           </div>
 
           <div className="metricCard">
@@ -349,16 +351,14 @@ export default function Home() {
                 feed?.realtime_event_count ??
                 0}
             </strong>
-            <small>
-              recent feedback events
-            </small>
+            <small>recent feedback events</small>
           </div>
         </div>
       </section>
 
       {!search &&
       feed?.history_examples?.length ? (
-        <section className="historySection">
+        <section>
           <div className="sectionHeading">
             <div>
               <span className="eyebrow">
@@ -366,16 +366,6 @@ export default function Home() {
               </span>
               <h3>Recent signals</h3>
             </div>
-
-            {(feed?.realtime_event_count ?? 0) >
-            0 ? (
-              <button
-                className="resetButton"
-                onClick={resetRealtime}
-              >
-                Reset live signals
-              </button>
-            ) : null}
           </div>
 
           <div className="historyRow">
@@ -410,7 +400,7 @@ export default function Home() {
           <div>
             <span className="eyebrow">
               {search
-                ? "Semantic search"
+                ? "Two-stage personalized search"
                 : "For you"}
             </span>
 
@@ -439,7 +429,7 @@ export default function Home() {
         {loading ? (
           <div className="loading">
             {search
-              ? "Searching semantic space…"
+              ? "Retrieving and reranking candidates…"
               : "Building personalized feed…"}
           </div>
         ) : (
@@ -486,24 +476,17 @@ export default function Home() {
                     ) : null}
 
                     <span>
-                      {
-                        item.interaction_support
-                      }{" "}
-                      interactions
+                      {item.interaction_support} interactions
                     </span>
                   </div>
 
                   <div className="actions">
                     <button
                       disabled={
-                        pendingItem ===
-                        item.item_id
+                        pendingItem === item.item_id
                       }
                       onClick={() =>
-                        sendFeedback(
-                          item,
-                          "like",
-                        )
+                        sendFeedback(item, "like")
                       }
                     >
                       ♡ Like
@@ -511,14 +494,10 @@ export default function Home() {
 
                     <button
                       disabled={
-                        pendingItem ===
-                        item.item_id
+                        pendingItem === item.item_id
                       }
                       onClick={() =>
-                        sendFeedback(
-                          item,
-                          "save",
-                        )
+                        sendFeedback(item, "save")
                       }
                     >
                       + Save
@@ -527,8 +506,7 @@ export default function Home() {
                     <button
                       className="hideAction"
                       disabled={
-                        pendingItem ===
-                        item.item_id
+                        pendingItem === item.item_id
                       }
                       onClick={() =>
                         sendFeedback(
