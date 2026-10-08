@@ -5,7 +5,6 @@
   --text: #151515;
   --muted: #717171;
   --line: #e5e5df;
-  --accent: #111111;
   font-family: Inter, ui-sans-serif, system-ui,
     -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
@@ -22,7 +21,8 @@ body {
 }
 
 button,
-select {
+select,
+input {
   font: inherit;
 }
 
@@ -77,12 +77,16 @@ main {
   font-size: 12px;
 }
 
+.userPicker select,
+.searchBar input {
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
 .userPicker select {
   width: 100%;
-  border: 1px solid var(--line);
   border-radius: 12px;
   padding: 11px 14px;
-  background: var(--surface);
 }
 
 .hero {
@@ -94,9 +98,9 @@ main {
 }
 
 .hero h2 {
-  max-width: 800px;
+  max-width: 850px;
   margin: 10px 0 16px;
-  font-size: clamp(42px, 6vw, 86px);
+  font-size: clamp(42px, 6vw, 82px);
   line-height: 0.94;
   letter-spacing: -0.06em;
 }
@@ -106,6 +110,46 @@ main {
   color: var(--muted);
   font-size: 17px;
   line-height: 1.65;
+}
+
+.searchBar {
+  display: flex;
+  gap: 8px;
+  max-width: 720px;
+  margin-top: 28px;
+}
+
+.searchBar input {
+  flex: 1;
+  min-width: 0;
+  border-radius: 999px;
+  padding: 14px 18px;
+  outline: none;
+}
+
+.searchBar input:focus {
+  border-color: #a8a8a0;
+}
+
+.searchBar button,
+.backButton,
+.resetButton {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 999px;
+}
+
+.searchBar button {
+  padding: 14px 22px;
+  background: #151515;
+  color: #fff;
+  border-color: #151515;
+}
+
+.backButton {
+  margin-top: 12px;
+  padding: 9px 13px;
+  font-size: 12px;
 }
 
 .metricGrid {
@@ -164,9 +208,6 @@ main {
 }
 
 .resetButton {
-  border: 1px solid var(--line);
-  background: var(--surface);
-  border-radius: 999px;
   padding: 8px 12px;
   font-size: 12px;
 }
@@ -346,12 +387,13 @@ main {
 }
 
 @media (max-width: 520px) {
-  .metricGrid {
+  .metricGrid,
+  .historyRow {
     grid-template-columns: 1fr;
   }
 
-  .historyRow {
-    grid-template-columns: 1fr;
+  .searchBar {
+    flex-direction: column;
   }
 
   .actions {

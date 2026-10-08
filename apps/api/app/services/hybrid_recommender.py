@@ -15,6 +15,7 @@ from app.services.realtime_feedback import (
     EVENT_WEIGHTS,
     get_feedback_store,
 )
+from app.services.semantic_query_encoder import get_query_encoder
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -26,6 +27,15 @@ ALPHA = 0.5
 MIN_INTERACTIONS = 5
 REALTIME_SEMANTIC_STRENGTH = 0.85
 MAX_REALTIME_EVENTS = 20
+
+# Search should remain primarily query-driven.
+SEARCH_PERSONALIZATION_WEIGHT = 0.25
+SEARCH_BEHAVIOR_WEIGHT = 0.10
+
+# Maximal Marginal Relevance diversity.
+MMR_LAMBDA = 0.82
+MMR_POOL_MULTIPLIER = 6
+MMR_MIN_POOL = 80
 
 
 def _zscore(scores: torch.Tensor) -> torch.Tensor:
@@ -194,8 +204,6 @@ class HybridRecommender:
             limit=MAX_REALTIME_EVENTS,
         )
 
-        # Redis returns newest first. Keep only the latest event
-        # for an item so repeated actions do not compound forever.
         latest = []
         seen_items = set()
 
@@ -239,11 +247,9 @@ class HybridRecommender:
         if not weighted_vectors:
             return None
 
-        total_weight = max(sum(weights), 1e-6)
-
         vector = (
             torch.stack(weighted_vectors, dim=0).sum(dim=0)
-            / total_weight
+            / max(sum(weights), 1e-6)
         )
 
         if torch.linalg.vector_norm(vector) < 1e-8:
@@ -258,8 +264,6 @@ class HybridRecommender:
     ) -> list[int]:
         positive_items = []
 
-        # Redis events are newest-first. Reverse them so the
-        # model sees recent positives in chronological order.
         for event in reversed(events):
             if event.get("event_type") not in {"like", "save"}:
                 continue
@@ -271,11 +275,190 @@ class HybridRecommender:
             if idx is not None:
                 positive_items.append(idx)
 
-        combined = (
-            offline_history + positive_items
+        combined = offline_history + positive_items
+        return combined[-self.max_history :]
+
+    @torch.inference_mode()
+    def _user_profiles(
+        self,
+        user_id: str,
+    ) -> tuple[torch.Tensor, torch.Tensor, list[dict]]:
+        offline_history = self.histories[user_id]
+        recent_events = self._latest_feedback_per_item(user_id)
+
+        semantic_history = torch.tensor(
+            offline_history,
+            dtype=torch.long,
+            device=self.device,
         )
 
-        return combined[-self.max_history :]
+        long_term_profile = F.normalize(
+            self.text_matrix[semantic_history].mean(dim=0),
+            p=2,
+            dim=0,
+        )
+
+        realtime_profile = self._realtime_profile(recent_events)
+
+        if realtime_profile is not None:
+            semantic_profile = F.normalize(
+                long_term_profile
+                + REALTIME_SEMANTIC_STRENGTH * realtime_profile,
+                p=2,
+                dim=0,
+            )
+        else:
+            semantic_profile = long_term_profile
+
+        learned_history = self._augmented_history(
+            offline_history,
+            recent_events,
+        )
+        learned_ids = torch.tensor(
+            learned_history,
+            dtype=torch.long,
+            device=self.device,
+        )
+
+        history_vectors = self.model.encode_items(
+            self.text_features[learned_ids],
+            self.image_features[learned_ids],
+            self.image_mask[learned_ids],
+        ).unsqueeze(0)
+
+        history_mask = torch.ones(
+            (1, len(learned_history)),
+            dtype=torch.bool,
+            device=self.device,
+        )
+
+        learned_profile = self.model.encode_users(
+            history_vectors,
+            history_mask,
+        )[0]
+
+        return (
+            semantic_profile,
+            learned_profile,
+            recent_events,
+        )
+
+    def _mmr_topk(
+        self,
+        scores: torch.Tensor,
+        limit: int,
+        lambda_value: float = MMR_LAMBDA,
+    ) -> list[int]:
+        """
+        Maximal Marginal Relevance.
+
+        First retrieve a relevance-heavy candidate pool, then greedily choose
+        items balancing relevance and dissimilarity to already selected items.
+        """
+        pool_size = min(
+            len(scores),
+            max(
+                MMR_MIN_POOL,
+                limit * MMR_POOL_MULTIPLIER,
+            ),
+        )
+
+        pool_scores, pool_indices = torch.topk(
+            scores,
+            k=pool_size,
+        )
+
+        # Convert relevance into 0..1 inside this candidate pool.
+        finite = torch.isfinite(pool_scores)
+        if not finite.any():
+            return []
+
+        valid_scores = pool_scores[finite]
+        valid_indices = pool_indices[finite]
+
+        min_score = valid_scores.min()
+        max_score = valid_scores.max()
+        relevance = (
+            (valid_scores - min_score)
+            / (max_score - min_score).clamp_min(1e-8)
+        )
+
+        candidate_vectors = self.text_matrix[valid_indices]
+
+        selected_local: list[int] = []
+        remaining = torch.ones(
+            len(valid_indices),
+            dtype=torch.bool,
+            device=self.device,
+        )
+
+        while len(selected_local) < min(limit, len(valid_indices)):
+            if not selected_local:
+                best_local = int(torch.argmax(relevance).item())
+            else:
+                selected_vectors = candidate_vectors[
+                    torch.tensor(
+                        selected_local,
+                        dtype=torch.long,
+                        device=self.device,
+                    )
+                ]
+
+                similarity = (
+                    candidate_vectors
+                    @ selected_vectors.T
+                ).max(dim=1).values
+
+                similarity = torch.clamp(
+                    similarity,
+                    min=0.0,
+                    max=1.0,
+                )
+
+                mmr_score = (
+                    lambda_value * relevance
+                    - (1.0 - lambda_value) * similarity
+                )
+
+                mmr_score[~remaining] = -torch.inf
+                best_local = int(
+                    torch.argmax(mmr_score).item()
+                )
+
+            selected_local.append(best_local)
+            remaining[best_local] = False
+
+        return [
+            int(valid_indices[idx].item())
+            for idx in selected_local
+        ]
+
+    def _item_payload(
+        self,
+        idx: int,
+        score: float,
+    ) -> dict:
+        item_id = self.item_ids[idx]
+        meta = self.metadata.get(item_id, {})
+
+        return {
+            "item_id": item_id,
+            "title": meta.get("title"),
+            "image_url": meta.get("image_url"),
+            "main_category": meta.get("main_category"),
+            "price": meta.get("price"),
+            "average_rating": meta.get("average_rating"),
+            "score": round(float(score), 4),
+            "interaction_support": int(
+                self.train_counts[idx].item()
+            ),
+            "strategy": (
+                "semantic+behavioral"
+                if self.train_counts[idx].item()
+                >= MIN_INTERACTIONS
+                else "semantic"
+            ),
+        }
 
     @torch.inference_mode()
     def recommend(
@@ -286,100 +469,31 @@ class HybridRecommender:
         if user_id not in self.histories:
             raise KeyError(user_id)
 
-        offline_history = self.histories[user_id]
-        recent_events = self._latest_feedback_per_item(
-            user_id
-        )
-
-        semantic_history = torch.tensor(
-            offline_history,
-            dtype=torch.long,
-            device=self.device,
-        )
-
-        long_term_profile = F.normalize(
-            self.text_matrix[
-                semantic_history
-            ].mean(dim=0),
-            p=2,
-            dim=0,
-        )
-
-        realtime_profile = self._realtime_profile(
-            recent_events
-        )
-
-        if realtime_profile is not None:
-            text_profile = F.normalize(
-                long_term_profile
-                + REALTIME_SEMANTIC_STRENGTH
-                * realtime_profile,
-                p=2,
-                dim=0,
-            )
-        else:
-            text_profile = long_term_profile
-
-        text_scores = _zscore(
-            self.text_matrix @ text_profile
-        )
-
-        learned_history = self._augmented_history(
-            offline_history,
+        (
+            semantic_profile,
+            learned_profile,
             recent_events,
+        ) = self._user_profiles(user_id)
+
+        semantic_scores = _zscore(
+            self.text_matrix @ semantic_profile
         )
-
-        learned_history_tensor = torch.tensor(
-            learned_history,
-            dtype=torch.long,
-            device=self.device,
-        )
-
-        history_vectors = self.model.encode_items(
-            self.text_features[
-                learned_history_tensor
-            ],
-            self.image_features[
-                learned_history_tensor
-            ],
-            self.image_mask[
-                learned_history_tensor
-            ],
-        ).unsqueeze(0)
-
-        history_mask = torch.ones(
-            (1, len(learned_history)),
-            dtype=torch.bool,
-            device=self.device,
-        )
-
-        user_vector = self.model.encode_users(
-            history_vectors,
-            history_mask,
-        )[0]
-
         learned_scores = _zscore(
-            self.learned_catalog @ user_vector
+            self.learned_catalog @ learned_profile
         )
 
         trust_mask = (
-            self.train_counts
-            >= MIN_INTERACTIONS
-        ).to(text_scores.dtype)
+            self.train_counts >= MIN_INTERACTIONS
+        ).to(semantic_scores.dtype)
 
         final_scores = (
-            text_scores
-            + ALPHA
-            * learned_scores
-            * trust_mask
+            semantic_scores
+            + ALPHA * learned_scores * trust_mask
         )
 
-        # Never repeat historical items.
         for seen_idx in self.seen[user_id]:
             final_scores[seen_idx] = -torch.inf
 
-        # Also remove items the user just acted on so refreshing
-        # visibly surfaces fresh recommendations.
         for event in recent_events:
             idx = self.item_to_idx.get(
                 str(event.get("item_id"))
@@ -387,98 +501,135 @@ class HybridRecommender:
             if idx is not None:
                 final_scores[idx] = -torch.inf
 
-        top_scores, top_indices = torch.topk(
+        selected_indices = self._mmr_topk(
             final_scores,
-            k=min(limit, len(final_scores)),
+            limit=limit,
         )
 
-        recommendations = []
-
-        for score, idx in zip(
-            top_scores.cpu().tolist(),
-            top_indices.cpu().tolist(),
-            strict=True,
-        ):
-            item_id = self.item_ids[idx]
-            meta = self.metadata.get(item_id, {})
-
-            recommendations.append(
-                {
-                    "item_id": item_id,
-                    "title": meta.get("title"),
-                    "image_url": meta.get("image_url"),
-                    "main_category": meta.get(
-                        "main_category"
-                    ),
-                    "price": meta.get("price"),
-                    "average_rating": meta.get(
-                        "average_rating"
-                    ),
-                    "score": round(
-                        float(score),
-                        4,
-                    ),
-                    "interaction_support": int(
-                        self.train_counts[
-                            idx
-                        ].item()
-                    ),
-                    "strategy": (
-                        "semantic+behavioral"
-                        if self.train_counts[
-                            idx
-                        ].item()
-                        >= MIN_INTERACTIONS
-                        else "semantic"
-                    ),
-                }
+        recommendations = [
+            self._item_payload(
+                idx,
+                float(final_scores[idx].item()),
             )
+            for idx in selected_indices
+        ]
 
         history_examples = []
 
-        for idx in offline_history[-5:]:
+        for idx in self.histories[user_id][-5:]:
             item_id = self.item_ids[idx]
-            meta = self.metadata.get(
-                item_id,
-                {},
-            )
-
+            meta = self.metadata.get(item_id, {})
             history_examples.append(
                 {
                     "item_id": item_id,
                     "title": meta.get("title"),
-                    "image_url": meta.get(
-                        "image_url"
-                    ),
+                    "image_url": meta.get("image_url"),
                 }
             )
 
         feedback_summary = [
             {
                 "item_id": str(event["item_id"]),
-                "event_type": str(
-                    event["event_type"]
-                ),
+                "event_type": str(event["event_type"]),
             }
             for event in recent_events
         ]
 
         return {
             "user_id": user_id,
-            "strategy": (
-                "hybrid_text_behavior_realtime_v1"
-            ),
+            "strategy": "hybrid_realtime_mmr_v1",
             "alpha": ALPHA,
             "min_interactions": MIN_INTERACTIONS,
-            "history_count": len(
-                self.histories[user_id]
-            ),
-            "realtime_event_count": len(
-                recent_events
-            ),
+            "diversity_strategy": "mmr",
+            "mmr_lambda": MMR_LAMBDA,
+            "history_count": len(self.histories[user_id]),
+            "realtime_event_count": len(recent_events),
             "recent_feedback": feedback_summary,
             "history_examples": history_examples,
             "recommendations": recommendations,
+        }
+
+    @torch.inference_mode()
+    def search(
+        self,
+        user_id: str,
+        query: str,
+        limit: int = 24,
+    ) -> dict:
+        if user_id not in self.histories:
+            raise KeyError(user_id)
+
+        query_vector = get_query_encoder().encode(query)
+
+        if query_vector.device != self.device:
+            query_vector = query_vector.to(self.device)
+
+        (
+            semantic_profile,
+            learned_profile,
+            recent_events,
+        ) = self._user_profiles(user_id)
+
+        query_scores = _zscore(
+            self.text_matrix @ query_vector
+        )
+
+        personalization_scores = _zscore(
+            self.text_matrix @ semantic_profile
+        )
+
+        learned_scores = _zscore(
+            self.learned_catalog @ learned_profile
+        )
+
+        trust_mask = (
+            self.train_counts >= MIN_INTERACTIONS
+        ).to(query_scores.dtype)
+
+        final_scores = (
+            query_scores
+            + SEARCH_PERSONALIZATION_WEIGHT
+            * personalization_scores
+            + SEARCH_BEHAVIOR_WEIGHT
+            * learned_scores
+            * trust_mask
+        )
+
+        # Discovery search avoids repeating already-consumed items.
+        for seen_idx in self.seen[user_id]:
+            final_scores[seen_idx] = -torch.inf
+
+        for event in recent_events:
+            idx = self.item_to_idx.get(
+                str(event.get("item_id"))
+            )
+            if idx is not None:
+                final_scores[idx] = -torch.inf
+
+        selected_indices = self._mmr_topk(
+            final_scores,
+            limit=limit,
+        )
+
+        results = [
+            self._item_payload(
+                idx,
+                float(final_scores[idx].item()),
+            )
+            for idx in selected_indices
+        ]
+
+        return {
+            "user_id": user_id,
+            "query": query,
+            "strategy": "siglip_personalized_search_mmr_v1",
+            "query_weight": 1.0,
+            "personalization_weight": SEARCH_PERSONALIZATION_WEIGHT,
+            "behavior_weight": SEARCH_BEHAVIOR_WEIGHT,
+            "diversity_strategy": "mmr",
+            "mmr_lambda": MMR_LAMBDA,
+            "realtime_event_count": len(recent_events),
+            "results": results,
         }
 
     def demo_users(
@@ -487,10 +638,7 @@ class HybridRecommender:
     ) -> list[dict]:
         ranked = sorted(
             (
-                (
-                    user_id,
-                    len(history),
-                )
+                (user_id, len(history))
                 for user_id, history
                 in self.histories.items()
             ),
@@ -503,8 +651,7 @@ class HybridRecommender:
                 "user_id": user_id,
                 "history_count": count,
             }
-            for user_id, count
-            in ranked[:limit]
+            for user_id, count in ranked[:limit]
         ]
 
 

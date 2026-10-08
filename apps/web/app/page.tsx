@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  FormEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -30,19 +31,21 @@ type HistoryItem = {
   image_url: string | null;
 };
 
-type RecentFeedback = {
-  item_id: string;
-  event_type: string;
-};
-
 type FeedResponse = {
   user_id: string;
   strategy: string;
   history_count: number;
   realtime_event_count: number;
-  recent_feedback: RecentFeedback[];
   history_examples: HistoryItem[];
   recommendations: Item[];
+};
+
+type SearchResponse = {
+  user_id: string;
+  query: string;
+  strategy: string;
+  realtime_event_count: number;
+  results: Item[];
 };
 
 type FeedbackType =
@@ -59,6 +62,9 @@ export default function Home() {
   const [selectedUser, setSelectedUser] = useState("");
   const [feed, setFeed] =
     useState<FeedResponse | null>(null);
+  const [search, setSearch] =
+    useState<SearchResponse | null>(null);
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [pendingItem, setPendingItem] =
     useState<string | null>(null);
@@ -91,6 +97,7 @@ export default function Home() {
 
       const data = await response.json();
       setFeed(data);
+      setSearch(null);
     } finally {
       setLoading(false);
     }
@@ -108,6 +115,58 @@ export default function Home() {
       ),
     [users, selectedUser],
   );
+
+  async function runSearch(
+    searchQuery: string,
+  ) {
+    if (!selectedUser || !searchQuery.trim()) {
+      return;
+    }
+
+    setLoading(true);
+    setNotice("");
+
+    try {
+      const params = new URLSearchParams({
+        user_id: selectedUser,
+        q: searchQuery.trim(),
+        limit: "24",
+      });
+
+      const response = await fetch(
+        `${API}/api/v1/discovery/search?${params.toString()}`,
+        { cache: "no-store" },
+      );
+
+      if (!response.ok) {
+        throw new Error("Search failed");
+      }
+
+      const data = await response.json();
+      setSearch(data);
+    } catch {
+      setNotice(
+        "Search failed. Check the API terminal.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function submitSearch(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+    runSearch(query);
+  }
+
+  async function reloadCurrentView() {
+    if (search) {
+      await runSearch(search.query);
+    } else {
+      await loadFeed();
+    }
+  }
 
   async function sendFeedback(
     item: Item,
@@ -148,13 +207,13 @@ export default function Home() {
       }[eventType];
 
       setNotice(
-        `${label}. Updating your feed…`,
+        `${label}. Updating results…`,
       );
 
-      await loadFeed();
+      await reloadCurrentView();
     } catch {
       setNotice(
-        "Could not update the feed. Check the API and Redis.",
+        "Could not update recommendations.",
       );
     } finally {
       setPendingItem(null);
@@ -163,8 +222,6 @@ export default function Home() {
 
   async function resetRealtime() {
     if (!selectedUser) return;
-
-    setNotice("");
 
     const response = await fetch(
       `${API}/api/v1/interactions/${selectedUser}/recent`,
@@ -175,9 +232,14 @@ export default function Home() {
       setNotice(
         "Recent preference signals cleared.",
       );
-      await loadFeed();
+      await reloadCurrentView();
     }
   }
+
+  const visibleItems =
+    search?.results ??
+    feed?.recommendations ??
+    [];
 
   return (
     <main>
@@ -202,6 +264,7 @@ export default function Home() {
                 event.target.value,
               );
               setNotice("");
+              setSearch(null);
             }}
           >
             {users.map((user) => (
@@ -220,19 +283,52 @@ export default function Home() {
       <section className="hero">
         <div>
           <p className="heroLabel">
-            Personalized for this user
+            Personalized discovery
           </p>
 
           <h2>
-            Discover what they may want next.
+            Find what matters,
+            not just what matches.
           </h2>
 
           <p>
-            Hybrid retrieval combines semantic
-            understanding, behavioral history,
-            and live feedback for instant
-            personalization.
+            Search by meaning, then rank by
+            long-term interests, live feedback,
+            and diversity.
           </p>
+
+          <form
+            className="searchBar"
+            onSubmit={submitSearch}
+          >
+            <input
+              value={query}
+              onChange={(event) =>
+                setQuery(event.target.value)
+              }
+              placeholder="Try: watercolor supplies for beginners"
+              aria-label="Semantic search"
+            />
+
+            <button
+              type="submit"
+              disabled={!query.trim() || loading}
+            >
+              Search
+            </button>
+          </form>
+
+          {search ? (
+            <button
+              className="backButton"
+              onClick={() => {
+                setQuery("");
+                loadFeed();
+              }}
+            >
+              ← Back to personalized feed
+            </button>
+          ) : null}
         </div>
 
         <div className="metricGrid">
@@ -249,7 +345,9 @@ export default function Home() {
           <div className="metricCard">
             <span>Live signals</span>
             <strong>
-              {feed?.realtime_event_count ?? 0}
+              {search?.realtime_event_count ??
+                feed?.realtime_event_count ??
+                0}
             </strong>
             <small>
               recent feedback events
@@ -258,7 +356,8 @@ export default function Home() {
         </div>
       </section>
 
-      {feed?.history_examples?.length ? (
+      {!search &&
+      feed?.history_examples?.length ? (
         <section className="historySection">
           <div className="sectionHeading">
             <div>
@@ -268,7 +367,8 @@ export default function Home() {
               <h3>Recent signals</h3>
             </div>
 
-            {feed.realtime_event_count > 0 ? (
+            {(feed?.realtime_event_count ?? 0) >
+            0 ? (
               <button
                 className="resetButton"
                 onClick={resetRealtime}
@@ -309,10 +409,15 @@ export default function Home() {
         <div className="sectionHeading">
           <div>
             <span className="eyebrow">
-              For you
+              {search
+                ? "Semantic search"
+                : "For you"}
             </span>
+
             <h3>
-              Recommended inspirations
+              {search
+                ? `Results for “${search.query}”`
+                : "Recommended inspirations"}
             </h3>
           </div>
 
@@ -323,121 +428,121 @@ export default function Home() {
               </span>
             ) : null}
 
-            {feed ? (
-              <span className="strategy">
-                {feed.strategy}
-              </span>
-            ) : null}
+            <span className="strategy">
+              {search?.strategy ??
+                feed?.strategy ??
+                ""}
+            </span>
           </div>
         </div>
 
         {loading ? (
           <div className="loading">
-            Building personalized feed…
+            {search
+              ? "Searching semantic space…"
+              : "Building personalized feed…"}
           </div>
         ) : (
           <div className="masonry">
-            {feed?.recommendations?.map(
-              (item) => (
-                <article
-                  className="card"
-                  key={item.item_id}
-                >
-                  <div className="imageWrap">
-                    {item.image_url ? (
-                      <img
-                        src={item.image_url}
-                        alt={item.title ?? ""}
-                      />
-                    ) : (
-                      <div className="imagePlaceholder">
-                        No image
-                      </div>
-                    )}
+            {visibleItems.map((item) => (
+              <article
+                className="card"
+                key={item.item_id}
+              >
+                <div className="imageWrap">
+                  {item.image_url ? (
+                    <img
+                      src={item.image_url}
+                      alt={item.title ?? ""}
+                    />
+                  ) : (
+                    <div className="imagePlaceholder">
+                      No image
+                    </div>
+                  )}
 
-                    <span className="strategyBadge">
-                      {item.strategy ===
-                      "semantic+behavioral"
-                        ? "Hybrid"
-                        : "Semantic"}
+                  <span className="strategyBadge">
+                    {item.strategy ===
+                    "semantic+behavioral"
+                      ? "Hybrid"
+                      : "Semantic"}
+                  </span>
+                </div>
+
+                <div className="cardBody">
+                  <h4>
+                    {item.title ??
+                      "Untitled item"}
+                  </h4>
+
+                  <div className="meta">
+                    {item.average_rating ? (
+                      <span>
+                        ★{" "}
+                        {item.average_rating.toFixed(
+                          1,
+                        )}
+                      </span>
+                    ) : null}
+
+                    <span>
+                      {
+                        item.interaction_support
+                      }{" "}
+                      interactions
                     </span>
                   </div>
 
-                  <div className="cardBody">
-                    <h4>
-                      {item.title ??
-                        "Untitled item"}
-                    </h4>
+                  <div className="actions">
+                    <button
+                      disabled={
+                        pendingItem ===
+                        item.item_id
+                      }
+                      onClick={() =>
+                        sendFeedback(
+                          item,
+                          "like",
+                        )
+                      }
+                    >
+                      ♡ Like
+                    </button>
 
-                    <div className="meta">
-                      {item.average_rating ? (
-                        <span>
-                          ★{" "}
-                          {item.average_rating.toFixed(
-                            1,
-                          )}
-                        </span>
-                      ) : null}
+                    <button
+                      disabled={
+                        pendingItem ===
+                        item.item_id
+                      }
+                      onClick={() =>
+                        sendFeedback(
+                          item,
+                          "save",
+                        )
+                      }
+                    >
+                      + Save
+                    </button>
 
-                      <span>
-                        {
-                          item.interaction_support
-                        }{" "}
-                        interactions
-                      </span>
-                    </div>
-
-                    <div className="actions">
-                      <button
-                        disabled={
-                          pendingItem ===
-                          item.item_id
-                        }
-                        onClick={() =>
-                          sendFeedback(
-                            item,
-                            "like",
-                          )
-                        }
-                      >
-                        ♡ Like
-                      </button>
-
-                      <button
-                        disabled={
-                          pendingItem ===
-                          item.item_id
-                        }
-                        onClick={() =>
-                          sendFeedback(
-                            item,
-                            "save",
-                          )
-                        }
-                      >
-                        + Save
-                      </button>
-
-                      <button
-                        className="hideAction"
-                        disabled={
-                          pendingItem ===
-                          item.item_id
-                        }
-                        onClick={() =>
-                          sendFeedback(
-                            item,
-                            "not_interested",
-                          )
-                        }
-                      >
-                        × Hide
-                      </button>
-                    </div>
+                    <button
+                      className="hideAction"
+                      disabled={
+                        pendingItem ===
+                        item.item_id
+                      }
+                      onClick={() =>
+                        sendFeedback(
+                          item,
+                          "not_interested",
+                        )
+                      }
+                    >
+                      × Hide
+                    </button>
                   </div>
-                </article>
-              ),
-            )}
+                </div>
+              </article>
+            ))}
           </div>
         )}
       </section>
