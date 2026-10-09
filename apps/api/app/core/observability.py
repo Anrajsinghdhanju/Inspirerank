@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from prometheus_client import Counter, Gauge, Histogram
 
-
 HTTP_REQUESTS = Counter(
     "inspirerank_http_requests_total",
     "HTTP requests handled by InspireRank.",

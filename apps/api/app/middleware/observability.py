@@ -8,7 +8,6 @@ from fastapi import Request
 
 from app.core.observability import HTTP_LATENCY, HTTP_REQUESTS
 
-
 logger = logging.getLogger("inspirerank.request")
 
 

@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.services.hybrid_recommender import get_recommender
 
-
 router = APIRouter()
 
 

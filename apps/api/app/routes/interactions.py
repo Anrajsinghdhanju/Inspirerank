@@ -6,7 +6,6 @@ from pydantic import BaseModel
 from app.services.hybrid_recommender import get_recommender
 from app.services.realtime_feedback import get_feedback_store
 
-
 router = APIRouter()
 
 

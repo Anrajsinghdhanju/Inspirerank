@@ -21,7 +21,6 @@ from app.routes.recommendations import router as recommendations_router
 from app.routes.search import router as search_router
 from app.routes.stats import router as stats_router
 
-
 configure_logging(settings.log_level)
 logger = logging.getLogger("inspirerank.startup")
 

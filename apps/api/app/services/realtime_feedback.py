@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from redis import Redis
 from redis.exceptions import RedisError
@@ -9,7 +9,6 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.db.session import engine
-
 
 VALID_EVENTS = {"like", "save", "not_interested"}
 EVENT_WEIGHTS = {
@@ -102,7 +101,7 @@ class RealtimeFeedbackStore:
             "item_id": item_id,
             "event_type": event_type,
             "weight": EVENT_WEIGHTS[event_type],
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         }
 
         key = self._redis_key(user_id)

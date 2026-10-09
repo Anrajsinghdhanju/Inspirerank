@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Response, status
 from redis import Redis
+from redis.exceptions import RedisError
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.db.session import engine
 
+logger = logging.getLogger("inspirerank.health")
 
 router = APIRouter()
 ROOT = Path(__file__).resolve().parents[4]
@@ -39,8 +43,11 @@ def ready(response: Response):
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
         checks["postgres"] = True
-    except Exception:
-        pass
+    except SQLAlchemyError as exc:
+        logger.warning(
+            "postgres_readiness_failed",
+            extra={"error": str(exc)},
+        )
 
     try:
         redis = Redis.from_url(
@@ -49,8 +56,11 @@ def ready(response: Response):
             socket_timeout=1,
         )
         checks["redis"] = bool(redis.ping())
-    except Exception:
-        pass
+    except RedisError as exc:
+        logger.warning(
+            "redis_readiness_failed",
+            extra={"error": str(exc)},
+        )
 
     checks["artifacts"] = all(path.exists() for path in REQUIRED_ARTIFACTS)
     is_ready = all(checks.values())

@@ -1,0 +1,14 @@
+{$APP_DOMAIN} {
+    encode zstd gzip
+
+    @api path /api/* /health/* /metrics /docs* /openapi.json
+
+    reverse_proxy @api api:8000
+    reverse_proxy web:3000
+
+    header {
+        -Server
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}

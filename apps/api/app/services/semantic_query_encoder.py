@@ -11,7 +11,6 @@ from transformers import AutoModel, AutoProcessor
 from app.core.config import settings
 from app.core.observability import QUERY_CACHE_EVENTS
 
-
 MODEL_NAME = "google/siglip-base-patch16-224"
 
 

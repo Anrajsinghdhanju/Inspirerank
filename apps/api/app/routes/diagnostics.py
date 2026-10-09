@@ -3,7 +3,6 @@ from fastapi import APIRouter
 from app.services.hybrid_recommender import get_recommender
 from app.services.semantic_query_encoder import get_query_encoder
 
-
 router = APIRouter()
 
 

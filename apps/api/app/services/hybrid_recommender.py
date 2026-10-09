@@ -12,12 +12,11 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 
-from ml_recsys.content_two_tower import LearnedMultimodalTwoTower
+from app.core.observability import observe_search_timings
 from app.services.catalog_quality import assess_item
 from app.services.realtime_feedback import EVENT_WEIGHTS, get_feedback_store
 from app.services.semantic_query_encoder import get_query_encoder
-from app.core.observability import observe_search_timings
-
+from ml_recsys.content_two_tower import LearnedMultimodalTwoTower
 
 ROOT = Path(__file__).resolve().parents[4]
 DATA_DIR = ROOT / "data/recsys/arts_crafts_5core"

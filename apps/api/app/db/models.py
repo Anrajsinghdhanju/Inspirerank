@@ -1,11 +1,19 @@
 from datetime import datetime
 
 from pgvector.sqlalchemy import VECTOR
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-
 
 EMBEDDING_DIM = 768
 
