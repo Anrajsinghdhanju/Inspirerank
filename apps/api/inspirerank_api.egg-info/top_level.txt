@@ -1,3 +1,4 @@
 app
+ml_recsys
 scripts
 tests

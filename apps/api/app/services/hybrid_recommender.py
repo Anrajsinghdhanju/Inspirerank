@@ -16,6 +16,7 @@ from ml_recsys.content_two_tower import LearnedMultimodalTwoTower
 from app.services.catalog_quality import assess_item
 from app.services.realtime_feedback import EVENT_WEIGHTS, get_feedback_store
 from app.services.semantic_query_encoder import get_query_encoder
+from app.core.observability import observe_search_timings
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -1028,6 +1029,16 @@ class HybridRecommender:
                 )
             )
 
+        timings = {
+            "query_encode": query_encode_ms,
+            "user_profiles": user_profile_ms,
+            "candidate_retrieval": candidate_retrieval_ms,
+            "personalized_rerank": rerank_ms,
+            "mmr": mmr_ms,
+            "total": _ms(total_start),
+        }
+        observe_search_timings(timings)
+
         return {
             "user_id": user_id,
             "query": query,
@@ -1061,14 +1072,7 @@ class HybridRecommender:
                 ).sum().item()
             ),
             "results": results,
-            "timings_ms": {
-                "query_encode": query_encode_ms,
-                "user_profiles": user_profile_ms,
-                "candidate_retrieval": candidate_retrieval_ms,
-                "personalized_rerank": rerank_ms,
-                "mmr": mmr_ms,
-                "total": _ms(total_start),
-            },
+            "timings_ms": timings,
         }
 
     def demo_users(

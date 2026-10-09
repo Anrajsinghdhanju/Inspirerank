@@ -1,0 +1,92 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-inspirerank}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:-inspirerank}
+    volumes:
+      - inspirerank_postgres_prod:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-inspirerank} -d ${POSTGRES_DB:-inspirerank}"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - inspirerank_redis_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - backend
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.prod
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      DATABASE_URL: >-
+        postgresql+psycopg://${POSTGRES_USER:-inspirerank}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-inspirerank}
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      WARM_RECOMMENDER: "true"
+      WARM_QUERY_ENCODER: "true"
+      QUERY_CACHE_SIZE: ${QUERY_CACHE_SIZE:-256}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      HF_HOME: /tmp/huggingface
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./data:/app/data:ro
+      - ./artifacts:/app/artifacts:ro
+      - huggingface_cache:/tmp/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+      - frontend
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - frontend
+
+volumes:
+  inspirerank_postgres_prod:
+  inspirerank_redis_prod:
+  huggingface_cache:
+
+networks:
+  backend:
+    internal: true
+  frontend:
