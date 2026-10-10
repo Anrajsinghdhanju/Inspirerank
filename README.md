@@ -6,7 +6,7 @@ InspireRank combines pretrained semantic representations, behavioral learning,
 real-time feedback, personalized search, diversity reranking, and production
 observability in one end-to-end system.
 
-> Public demo: add the deployment URL here after Milestone 16 deployment.
+> Public demo: Not yet deployed (sorrrryy)
 
 ## What it does
 
